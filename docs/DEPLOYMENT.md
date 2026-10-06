@@ -2,9 +2,7 @@
 
 This is a literal, step-by-step runbook for taking the backend from this repo to a live MVP on
 AWS. It assumes you have: an AWS account with billing enabled, a domain (or subdomain) you can
-point at the server, and the OpenAI / Firebase credentials described below. None of the steps in
-this document have been executed automatically — they require real credentials this development
-environment does not have.
+point at the server, and the OpenAI / Firebase credentials described below.
 
 Two deployment paths are provided; pick one (see `infrastructure/docker/README.md` for the
 tradeoffs):
@@ -13,6 +11,55 @@ tradeoffs):
 - **B. Docker Compose on EC2** via `infrastructure/docker/docker-compose.prod.yml`
 
 Steps 1-4 and 8-10 apply to both; step 5 branches.
+
+---
+
+## Quick reference: the current live deployment
+
+The backend is already deployed this way, on an existing EC2 `t4g.small` that **also runs an
+unrelated application stack**. It is isolated from that stack by Compose project name
+(`name: orthocare`), its own network and volumes, and a distinct host port — the other stack
+owns 80/443, so OrthoCare is published on **8081** and the mobile app talks to it directly
+(no Nginx, no domain, no TLS — see the warning below).
+
+Deployed/managed over **AWS Systems Manager** (no SSH key needed, since the instance runs the SSM
+agent):
+
+```bash
+# one-time: clone and bring the stack up
+aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript \
+  --parameters 'commands=[
+    "git clone https://github.com/<owner>/OrthoCare.git /opt/orthocare",
+    "cd /opt/orthocare/infrastructure/docker",
+    "docker compose -f docker-compose.prod.yml up -d --build",
+    "docker compose -f docker-compose.prod.yml exec -T backend npm run migration:run",
+    "docker compose -f docker-compose.prod.yml exec -T backend npm run seed:demo"
+  ]'
+
+# redeploy after pushing changes
+aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript \
+  --parameters 'commands=[
+    "cd /opt/orthocare && git pull --ff-only",
+    "cd infrastructure/docker && docker compose -f docker-compose.prod.yml up -d --build"
+  ]'
+```
+
+`infrastructure/docker/.env` is generated **on the server** with a random `POSTGRES_PASSWORD` and
+`JWT_SECRET` (via `openssl rand`) and is never committed. `BACKEND_HOST_PORT` selects the published
+port. Check free ports with `ss -tlnp` before picking one.
+
+Required after deploying: open inbound TCP on your chosen port in the instance's security group,
+or the API is only reachable from the server itself.
+
+> ⚠️ **No TLS in this configuration.** Without a domain you cannot get a trusted Let's Encrypt
+> certificate, so the app currently sends patient data over **plain HTTP**, allowed only by an
+> Android `network_security_config` exception scoped to that one server IP. This is acceptable for
+> testing only. Before handling real patient data, point a domain (or a free wildcard-DNS name such
+> as `<ip-with-dashes>.sslip.io`, which *does* work with certbot) at the server, terminate TLS in
+> front of the backend per step 4, and delete the cleartext exception from
+> `mobile/android/app/src/main/res/xml/network_security_config.xml`.
+
+---
 
 ## 1. Launch the EC2 instance
 

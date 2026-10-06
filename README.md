@@ -53,47 +53,48 @@ There is intentionally **no separate web admin app** — the admin/doctor screen
 management, shift management, attendance, escalations, document knowledge base) are additional
 role-gated screens inside the same Flutter app that patients and nurses use.
 
-## Current status (honest, as of this build pass)
-
-This was built in a dev environment with **no AWS account, no Firebase/OpenAI credentials, no
-Android SDK/Java, and no Flutter SDK installed** — so some of what follows was written and
-reasoned through carefully but not executed end-to-end here. Check `backend/README.md` and
-`mobile/README.md` for the most current, specific status of each piece as they were built out in
-parallel with this document.
+## Current status (honest)
 
 - **Backend (NestJS + PostgreSQL/pgvector)** — implemented against the full spec (auth, roles,
   attendance, shifts, document ingestion, chunking, embeddings, RAG retrieval, GPT-4.1 mini chat,
   escalation + active-nurse assignment, FCM, dashboard/reports, audit log, 30-day retention
-  cleanup). Runs locally today via Docker Compose (`backend/docker-compose.yml` brings up
-  Postgres+pgvector) even without real OpenAI/AWS/FCM credentials, since those integrations fall
-  back to a documented mock mode when their env vars are blank — see `backend/.env.example` and
-  `backend/README.md` for how to run it and what's mocked vs. real.
-- **Mobile app (Flutter)** — source written for all three roles (patient, nurse, admin/doctor),
-  but **not yet compiled**: this environment has no Flutter SDK. The first thing to do with it is
-  `cd mobile && flutter pub get && flutter analyze` and fix whatever that surfaces — see
-  `mobile/README.md` for the specific risk areas flagged during the build-out.
-- **Infrastructure / deployment** (this piece) — EC2 bootstrap script, Postgres backup script,
-  Nginx+TLS config, and an alternative Docker Compose production stack are all written and ready
-  to run, but **were not executed against a real AWS account** — none exists in this environment.
-  `docs/DEPLOYMENT.md` is the literal runbook for a human with AWS credentials to follow. There is
-  no S3/object-storage dependency anywhere — clinic PDFs/DOCX are stored on local disk on the
-  server (`backend/storage/documents`), backed up the same way as the database.
+  cleanup). **36/36 unit tests pass**, and the full spec-section-61 flow was smoke-tested against a
+  real Postgres+pgvector (upload → extract → chunk → embed → activate → patient question → AI
+  answer with recorded source chunks → "not helpful" → escalation → on-duty nurse assignment →
+  mock FCM → resolution).
+- **Backend is DEPLOYED and live** on an EC2 `t4g.small` (`wahflow-server`), running as Docker
+  containers alongside an unrelated pre-existing stack on the same host without interfering with
+  it (own Compose project name, own network/volumes, own port). `GET /health` returns
+  `{"status":"ok"}`, migrations are applied, and demo accounts + the demo knowledge pack are
+  seeded. It currently answers on `http://<server-ip>:8081`.
+- **Mobile app (Flutter)** — all 18 screens across all three roles (patient, nurse, admin/doctor).
+  `flutter pub get` and `flutter analyze` are **clean (0 errors)**, verified by running Flutter
+  3.44.0. The release APK/AAB is built in CI (`.github/workflows/mobile-build.yml`) — see
+  `mobile/README.md` for where to download the artifacts.
+- **Infrastructure** — EC2 bootstrap script, Postgres backup script, Nginx+TLS config and a
+  production Docker Compose stack. The Docker Compose path is the one actually used for the live
+  deployment. There is no S3/object-storage dependency anywhere — clinic PDFs/DOCX are stored on
+  local disk on the server (`storage/documents`), backed up the same way as the database.
 - **Demo knowledge pack** (`knowledge/demo/`) — seeded as `DEMO_REVIEW_REQUIRED`, per the spec's
   safety rule that nothing becomes clinic-approved (`ACTIVE`) without an explicit doctor review
   step, even demo/test content.
 
-## What a human needs to do to reach a live MVP
+### Known gaps / what still needs a human
 
-1. **Get credentials**: an OpenAI API key, an AWS account (for EC2 only — no S3 is used), and a
-   Firebase project (for FCM). None of these exist in this dev environment.
-2. **Install local tooling**: Flutter SDK + Android SDK/Java, to compile, analyze, and build the
-   mobile app (`docs/ANDROID.md`).
-3. **Run the backend locally first**: `cd backend && docker compose up -d && npm install && npm run migration:run && npm run start:dev` (confirm exact scripts in `backend/README.md`) — this works today without any of the external credentials, in mock mode.
-4. **Deploy to AWS**: follow `docs/DEPLOYMENT.md` top to bottom once you have real credentials.
-5. **Build and sign the Android app**, point it at the deployed backend, and run the full
-   end-to-end flow from spec section 61 (upload a document → activate it → ask a question as a
-   patient → get an AI answer → mark "not helpful" → confirm the on-duty nurse gets notified and
-   can resolve the case) before calling it live.
+1. **Open the API port in the EC2 security group** — inbound TCP `8081` from `0.0.0.0/0`. Until
+   this is done the backend is only reachable from the server itself, not from a phone.
+2. **No TLS yet.** The app talks to the backend over plain HTTP on an IP (there is no domain), and
+   an Android `network_security_config` scoped to that single IP permits it. **This is a stopgap
+   for testing, not acceptable for real patient data** — put a domain + TLS cert in front of the
+   backend (see `docs/DEPLOYMENT.md`) and delete that cleartext exception before going live.
+3. **OpenAI key**: set `OPENAI_API_KEY` in the server's `.env` and restart the backend container.
+   Until then the AI answers come from a deterministic mock, not GPT-4.1 mini.
+4. **Firebase/FCM is unconfigured**, so push notifications are recorded and logged but not
+   delivered. Needs a Firebase project + `google-services.json` (app) and `FCM_*` vars (backend).
+5. **No widget/integration tests** for the Flutter app, and the end-to-end flow has not been
+   exercised from a real device yet.
+6. **Resource headroom**: the shared `t4g.small` has ~1.8 GB RAM total for both stacks. Watch for
+   memory pressure, or move OrthoCare to its own instance.
 
 ## Explicitly out of scope (by design, not an oversight)
 
