@@ -4,13 +4,24 @@
 # rather manage the backend + database as containers on a single EC2 host (or any VM) than
 # install Node/Postgres directly on the OS. See ./README.md for when to pick which.
 #
+# This stack is scoped with its own project name ("orthocare") and an isolated network/volumes,
+# so it coexists safely alongside an unrelated stack already running on the same host (e.g. one
+# started under a different Compose project name/directory) — it won't collide with that other
+# stack's networks, volumes, or container names.
+#
+# No Nginx / TLS / domain here by design: the mobile app talks to the backend directly over
+# http://<host>:${BACKEND_HOST_PORT}. Pick a BACKEND_HOST_PORT (in .env) that nothing else on the
+# host is already using — check with `ss -tlnp` before first deploy. Add a domain + TLS later
+# (either via infrastructure/nginx/orthocare.conf on its own port, or a Let's-Encrypt-friendly
+# free DNS like sslip.io) before this handles real patient data in production; plain HTTP is only
+# an acceptable stopgap for initial testing.
+#
 # Usage:
 #   cp ../../backend/.env.example .env   # then fill in real production values
+#   echo "BACKEND_HOST_PORT=8081" >> .env   # or whatever free port you picked
 #   docker compose -f docker-compose.prod.yml up -d --build
-#
-# Nginx still terminates TLS in front of this stack — point infrastructure/nginx/orthocare.conf's
-# upstream at 127.0.0.1:3000 (the port published below), or run Nginx as a third container on
-# this same network if you prefer not to install it on the host at all.
+
+name: orthocare
 
 services:
   postgres:
@@ -47,7 +58,7 @@ services:
     volumes:
       - orthocare_uploads:/app/storage
     ports:
-      - "127.0.0.1:3000:3000"  # Nginx on the host proxies to this; not exposed publicly
+      - "0.0.0.0:${BACKEND_HOST_PORT:-8081}:3000"  # reachable directly by the mobile app
     networks:
       - orthocare_internal
 

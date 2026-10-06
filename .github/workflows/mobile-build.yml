@@ -17,7 +17,7 @@ on:
       api_base_url:
         description: "Backend API base URL to bake into this build"
         required: false
-        default: "https://api.yourclinic.example"
+        default: "http://100.59.151.247:8081"
 
 jobs:
   build:
@@ -69,12 +69,12 @@ jobs:
       - name: Build release APK
         run: |
           flutter build apk --release \
-            --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'https://api.yourclinic.example' }}
+            --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
 
       - name: Build release AAB (Play Store bundle)
         run: |
           flutter build appbundle --release \
-            --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'https://api.yourclinic.example' }}
+            --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

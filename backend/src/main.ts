@@ -18,7 +18,8 @@ async function bootstrap() {
   );
 
   app.enableCors();
-  app.setGlobalPrefix('api');
+  // No global prefix: the mobile app and docs/API.md both consume bare paths
+  // (e.g. POST /auth/login, not POST /api/auth/login) per spec section 54.
 
   const config = app.get(ConfigService);
   const port = config.get<number>('port') || 3000;

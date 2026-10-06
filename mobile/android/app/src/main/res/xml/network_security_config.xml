@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android blocks plain HTTP by default (targeting API 28+). The OrthoCare backend is
+  deployed without a domain/TLS for now (see docs/DEPLOYMENT.md "coexisting on
+  wahflow-server" section) so the app talks to it over http://<server-ip>:8081.
+
+  This allows cleartext ONLY to that one server IP - not globally - so every other
+  connection the app makes (if any are ever added) still requires HTTPS.
+
+  Replace 100.59.151.247 if the server's IP changes, and DELETE this override entirely
+  once a domain + TLS cert is in front of the backend (docs/DEPLOYMENT.md step 4).
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">100.59.151.247</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
