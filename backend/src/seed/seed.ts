@@ -96,7 +96,12 @@ async function run() {
 
   console.log('--- Seeding demo knowledge pack (DEMO_REVIEW_REQUIRED, not ACTIVE) ---');
 
-  const packPath = path.join(__dirname, '..', '..', '..', 'knowledge', 'demo', 'demo-knowledge-pack.json');
+  // Prefer the repo-root copy (single source of truth for local/non-Docker runs);
+  // fall back to the copy bundled inside backend/src/seed/ (Docker images only ever
+  // get backend/'s own build context, not the sibling top-level knowledge/ folder).
+  const repoRootPackPath = path.join(__dirname, '..', '..', '..', 'knowledge', 'demo', 'demo-knowledge-pack.json');
+  const bundledPackPath = path.join(__dirname, 'demo-knowledge-pack.json');
+  const packPath = fs.existsSync(repoRootPackPath) ? repoRootPackPath : bundledPackPath;
   const records: DemoRecord[] = JSON.parse(fs.readFileSync(packPath, 'utf-8'));
 
   for (const record of records) {
