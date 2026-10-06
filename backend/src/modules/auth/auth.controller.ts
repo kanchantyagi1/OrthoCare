@@ -12,7 +12,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password);
+    return this.auth.login(dto.identifier, dto.password);
   }
 
   @UseGuards(JwtAuthGuard)

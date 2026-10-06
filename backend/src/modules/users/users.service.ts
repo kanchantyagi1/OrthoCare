@@ -12,6 +12,14 @@ export class UsersService {
     return this.repo.findOne({ where: { email } });
   }
 
+  /// Login accepts either an email or a phone number, since clinic staff are
+  /// commonly identified by phone rather than email.
+  findByEmailOrPhone(identifier: string) {
+    return this.repo.findOne({
+      where: [{ email: identifier }, { phone: identifier }],
+    });
+  }
+
   findById(id: string) {
     return this.repo.findOne({ where: { id } });
   }

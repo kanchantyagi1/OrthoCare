@@ -6,7 +6,7 @@ describe('AuthService', () => {
   it('logs in successfully with correct credentials and records an audit event', async () => {
     const passwordHash = await bcrypt.hash('Password123!', 4);
     const users = {
-      findByEmail: jest.fn(async () => ({
+      findByEmailOrPhone: jest.fn(async () => ({
         id: 'user-1',
         email: 'nurse@orthocare.demo',
         passwordHash,
@@ -26,10 +26,36 @@ describe('AuthService', () => {
     expect(audit.record).toHaveBeenCalled();
   });
 
+  it('logs in with a phone number as the identifier, not just an email', async () => {
+    const passwordHash = await bcrypt.hash('Password123!', 4);
+    const users = {
+      findByEmailOrPhone: jest.fn(async (identifier: string) =>
+        identifier === '9876543210'
+          ? {
+              id: 'user-2',
+              email: 'priya@orthocare.demo',
+              phone: '9876543210',
+              passwordHash,
+              isActive: true,
+              fullName: 'Priya',
+              role: 'nurse',
+            }
+          : null,
+      ),
+    };
+    const jwt = { sign: jest.fn(() => 'signed-jwt-token') };
+    const service = new AuthService(users as any, jwt as any, { record: jest.fn() } as any);
+
+    const result = await service.login('9876543210', 'Password123!');
+
+    expect(users.findByEmailOrPhone).toHaveBeenCalledWith('9876543210');
+    expect(result.user.id).toBe('user-2');
+  });
+
   it('rejects an incorrect password', async () => {
     const passwordHash = await bcrypt.hash('Password123!', 4);
     const users = {
-      findByEmail: jest.fn(async () => ({
+      findByEmailOrPhone: jest.fn(async () => ({
         id: 'user-1',
         email: 'nurse@orthocare.demo',
         passwordHash,
@@ -44,7 +70,7 @@ describe('AuthService', () => {
   });
 
   it('rejects an unknown email without leaking whether the account exists', async () => {
-    const users = { findByEmail: jest.fn(async () => null) };
+    const users = { findByEmailOrPhone: jest.fn(async () => null) };
     const service = new AuthService(users as any, {} as any, { record: jest.fn() } as any);
 
     await expect(service.login('nobody@orthocare.demo', 'whatever')).rejects.toThrow(UnauthorizedException);
@@ -53,7 +79,7 @@ describe('AuthService', () => {
   it('rejects a deactivated account', async () => {
     const passwordHash = await bcrypt.hash('Password123!', 4);
     const users = {
-      findByEmail: jest.fn(async () => ({ id: 'user-1', passwordHash, isActive: false })),
+      findByEmailOrPhone: jest.fn(async () => ({ id: 'user-1', passwordHash, isActive: false })),
     };
     const service = new AuthService(users as any, {} as any, { record: jest.fn() } as any);
 

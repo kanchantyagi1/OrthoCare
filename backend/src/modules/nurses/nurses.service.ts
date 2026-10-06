@@ -61,6 +61,38 @@ export class NursesService {
     return this.findOne(id);
   }
 
+  async update(
+    id: string,
+    data: { fullName?: string; phone?: string; isActive?: boolean },
+  ) {
+    const nurse = await this.findOne(id);
+    if (!nurse) throw new NotFoundException('Nurse not found');
+
+    const userPatch: Partial<User> = {};
+    if (data.fullName !== undefined) userPatch.fullName = data.fullName;
+    if (data.phone !== undefined) userPatch.phone = data.phone;
+    if (data.isActive !== undefined) userPatch.isActive = data.isActive;
+    if (Object.keys(userPatch).length > 0) {
+      await this.userRepo.update({ id: nurse.userId }, userPatch);
+    }
+
+    if (data.isActive !== undefined) {
+      await this.repo.update({ id }, { isActive: data.isActive });
+    }
+    return this.findOne(id);
+  }
+
+  /// Deactivates instead of deleting. Attendance records, escalation assignments and
+  /// case notes reference this nurse and must survive for audit, and a deactivated
+  /// nurse is already excluded from getCurrentAvailableNurse() assignment.
+  async deactivate(id: string) {
+    const nurse = await this.findOne(id);
+    if (!nurse) throw new NotFoundException('Nurse not found');
+    await this.repo.update({ id }, { isActive: false });
+    await this.userRepo.update({ id: nurse.userId }, { isActive: false });
+    return { id, deactivated: true };
+  }
+
   get repository() {
     return this.repo;
   }

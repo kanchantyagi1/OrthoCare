@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Attendance } from '../attendance/entities/attendance.entity';
 import { Nurse } from '../nurses/entities/nurse.entity';
+import { Shift } from '../shifts/entities/shift.entity';
 import { Escalation } from '../escalations/entities/escalation.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { ChatSession } from '../chat/entities/chat-session.entity';
@@ -28,7 +29,49 @@ export class DashboardService {
     @InjectRepository(Escalation) private readonly escalationRepo: Repository<Escalation>,
     @InjectRepository(ChatSession) private readonly sessionRepo: Repository<ChatSession>,
     @InjectRepository(ChatMessage) private readonly messageRepo: Repository<ChatMessage>,
+    @InjectRepository(Shift) private readonly shiftRepo: Repository<Shift>,
   ) {}
+
+  /// Nurse-scoped counterpart to overview(), backing the nurse home screen
+  /// (spec section 31): today's shift, punch state, and this nurse's own caseload.
+  async nurseOverview(nurseId: string) {
+    const [shifts, openAttendance, escalations] = await Promise.all([
+      this.shiftRepo.find({ where: { nurseId, isActive: true } }),
+      this.attendanceRepo.findOne({
+        where: { nurseId, punchOut: IsNull() },
+        order: { punchIn: 'DESC' },
+      }),
+      this.escalationRepo.find({ where: { assignedNurseId: nurseId } }),
+    ]);
+
+    const nowHhMm = new Date().toTimeString().slice(0, 5);
+    // Shifts are daily HH:mm windows; a window whose end is <= its start wraps midnight.
+    const todayShift =
+      shifts.find((s) =>
+        s.endTime > s.startTime
+          ? nowHhMm >= s.startTime && nowHhMm < s.endTime
+          : nowHhMm >= s.startTime || nowHhMm < s.endTime,
+      ) ?? shifts[0] ?? null;
+
+    const since = startOfToday();
+    const responseTimes = escalations
+      .filter((e) => e.contactedAt && e.assignedAt)
+      .map((e) => e.contactedAt!.getTime() - e.assignedAt!.getTime());
+
+    return {
+      todayShift,
+      attendance: openAttendance ?? null,
+      status: openAttendance ? 'ACTIVE' : 'OFFLINE',
+      newCases: escalations.filter((e) => e.status === EscalationStatus.ASSIGNED).length,
+      pending: escalations.filter(
+        (e) => e.status === EscalationStatus.ASSIGNED || e.status === EscalationStatus.CONTACTED,
+      ).length,
+      resolved: escalations.filter(
+        (e) => e.status === EscalationStatus.RESOLVED && e.resolvedAt && e.resolvedAt >= since,
+      ).length,
+      averageResponseMinutes: avgMinutes(responseTimes) ?? 0,
+    };
+  }
 
   async overview() {
     const since = startOfToday();

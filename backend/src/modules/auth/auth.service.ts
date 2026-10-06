@@ -13,8 +13,8 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  async login(email: string, password: string) {
-    const user = await this.users.findByEmail(email);
+  async login(identifier: string, password: string) {
+    const user = await this.users.findByEmailOrPhone(identifier);
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
