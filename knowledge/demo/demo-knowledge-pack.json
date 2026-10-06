@@ -1,0 +1,75 @@
+[
+  {
+    "title": "Weight Bearing After Hip or Knee Replacement",
+    "surgeryType": "Hip Replacement / Knee Replacement",
+    "category": "Walking / Weight Bearing",
+    "questionVariations": [
+      "Can I walk after surgery?",
+      "Can I put weight on my leg?",
+      "Do I need a walker?",
+      "When can I stop using crutches?"
+    ],
+    "source": "Orthopedic educational reference",
+    "sectionTitle": "Weight Bearing After Hip or Knee Replacement",
+    "knowledgeText": "After hip or knee replacement, the appropriate amount of weight bearing and the timing for reducing or stopping use of crutches or a walker should follow the instructions provided by the patient's surgeon or physical therapist. Do: Follow the individualized weight-bearing instructions from the treating team. Don't: Do not independently decide to increase weight bearing or stop using an assistive device based only on the chatbot. Escalation: If the patient is unsure about their prescribed weight-bearing instructions, route the question to the clinic team.",
+    "status": "DEMO_REVIEW_REQUIRED"
+  },
+  {
+    "title": "Walking Progression After Joint Replacement",
+    "surgeryType": "Hip Replacement / Knee Replacement",
+    "category": "Walking / Recovery",
+    "questionVariations": [
+      "How should I start walking?",
+      "Can I walk outside?",
+      "How much should I walk?",
+      "Should I increase walking gradually?"
+    ],
+    "source": "Orthopedic educational reference",
+    "sectionTitle": "Walking Progression After Joint Replacement",
+    "knowledgeText": "Walking is generally progressed gradually during recovery. Patients should follow the walking and activity plan provided by their treating clinician. Do: Follow the individualized rehabilitation plan. Don't: Do not create an independent walking target if the clinic's postoperative instructions do not specify one. Escalation: If the patient reports worsening symptoms while walking or is unsure about their prescribed activity level, escalate to the clinic team.",
+    "status": "DEMO_REVIEW_REQUIRED"
+  },
+  {
+    "title": "Exercise After Orthopedic Surgery",
+    "surgeryType": "Orthopedic Surgery",
+    "category": "Exercise / Physiotherapy",
+    "questionVariations": [
+      "When can I start exercise?",
+      "Which exercise should I do?",
+      "Can I start physiotherapy?",
+      "Is exercise safe after surgery?"
+    ],
+    "source": "Orthopedic educational reference",
+    "sectionTitle": "Exercise After Orthopedic Surgery",
+    "knowledgeText": "Exercise and rehabilitation should follow the patient's doctor/physical therapist instructions. The appropriate exercises depend on the surgery and individual recovery plan. Do: Follow the exercise program prescribed by the treating clinician. Don't: Do not provide an exercise program that is not contained in the clinic's approved postoperative instructions. Escalation: If the patient asks for an exercise that is not covered by the clinic knowledge base, escalate to the nurse/doctor.",
+    "status": "DEMO_REVIEW_REQUIRED"
+  },
+  {
+    "title": "Pain During Exercise",
+    "surgeryType": "Orthopedic Surgery",
+    "category": "Exercise Safety",
+    "questionVariations": [
+      "Exercise karte time pain ho raha hai",
+      "Exercise ke waqt pain normal hai?",
+      "Should I continue exercising if it hurts?"
+    ],
+    "source": "Orthopedic educational reference",
+    "sectionTitle": "Pain During Exercise",
+    "knowledgeText": "If the clinic's approved rehabilitation instructions indicate that pain during an exercise should be discussed with the treating clinician, the chatbot should direct the patient to the appropriate clinic team rather than independently deciding whether the exercise should continue.",
+    "status": "DEMO_REVIEW_REQUIRED"
+  },
+  {
+    "title": "Recovery Is Individual",
+    "surgeryType": "Joint Replacement",
+    "category": "Recovery Timeline",
+    "questionVariations": [
+      "Surgery ke baad normal recovery kitne din mein hogi?",
+      "When will I completely recover?",
+      "When can I return to normal activities?"
+    ],
+    "source": "Orthopedic educational reference",
+    "sectionTitle": "Recovery Is Individual",
+    "knowledgeText": "Recovery varies between patients. Timing for returning to activities should follow the treating surgeon's individualized instructions and the patient's progress. Do: Follow the postoperative plan provided by the clinic. Don't: Do not provide a fixed recovery date unless the approved clinic document specifically provides one for that patient/surgery.",
+    "status": "DEMO_REVIEW_REQUIRED"
+  }
+]

@@ -1,0 +1,44 @@
+## Node / NestJS
+node_modules/
+dist/
+backend/node_modules/
+backend/dist/
+backend/.env
+*.log
+npm-debug.log*
+
+## Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugin-dependencies
+mobile/build/
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
+**/android/key.properties
+**/android/app/*.jks
+**/android/local.properties
+**/android/.gradle/
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+
+## Admin web
+admin-web/node_modules/
+admin-web/dist/
+
+## Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+## OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+## Backups / uploads (local dev)
+backend/uploads/
+backend/storage/
+*.sql.gz

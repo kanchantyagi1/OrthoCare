@@ -1,0 +1,60 @@
+# OrthoCare AI — production-style Docker Compose deployment.
+#
+# Alternative to the bare-metal infrastructure/aws/setup-ec2.sh path. Use this when you'd
+# rather manage the backend + database as containers on a single EC2 host (or any VM) than
+# install Node/Postgres directly on the OS. See ./README.md for when to pick which.
+#
+# Usage:
+#   cp ../../backend/.env.example .env   # then fill in real production values
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Nginx still terminates TLS in front of this stack — point infrastructure/nginx/orthocare.conf's
+# upstream at 127.0.0.1:3000 (the port published below), or run Nginx as a third container on
+# this same network if you prefer not to install it on the host at all.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-orthocare}
+      POSTGRES_USER: ${POSTGRES_USER:-orthocare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - orthocare_pgdata:/var/lib/postgresql/data
+    networks:
+      - orthocare_internal
+    # Deliberately NOT published to the host/public internet — only the backend
+    # container reaches it, over the internal network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orthocare}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - orthocare_uploads:/app/storage
+    ports:
+      - "127.0.0.1:3000:3000"  # Nginx on the host proxies to this; not exposed publicly
+    networks:
+      - orthocare_internal
+
+networks:
+  orthocare_internal:
+    driver: bridge
+
+volumes:
+  orthocare_pgdata:
+  orthocare_uploads:
