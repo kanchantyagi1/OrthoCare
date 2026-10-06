@@ -56,15 +56,20 @@ jobs:
       # Without them, the build falls back to Flutter's default debug signing,
       # which is fine for internal testing but not for Play Store distribution.
       - name: Decode release keystore (optional)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        # `secrets` can't be referenced in a step `if:` condition (GitHub Actions
+        # restriction) - so the conditional lives inside the shell script instead.
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.jks
-          cat > android/key.properties <<EOF
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.jks
+            cat > android/key.properties <<EOF
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           storeFile=release.jks
           EOF
+          else
+            echo "No release keystore secrets configured - building with Flutter's default debug signing."
+          fi
 
       - name: Build release APK
         run: |
