@@ -18,11 +18,10 @@ class _KnowledgeBaseScreenState extends ConsumerState<KnowledgeBaseScreen> {
   bool _uploading = false;
 
   Future<void> _pickAndUpload() async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'docx'],
     );
-    final file = result?.files.single;
     if (file?.path == null) return;
 
     setState(() => _uploading = true);

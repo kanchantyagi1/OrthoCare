@@ -6,8 +6,11 @@ class SecureStorageService {
   SecureStorageService._internal();
   static final SecureStorageService instance = SecureStorageService._internal();
 
+  // flutter_secure_storage 11+ always encrypts on Android (AES-GCM data cipher with
+  // RSA-OAEP key wrapping, backed by the Android KeyStore) - the old
+  // `encryptedSharedPreferences: true` flag no longer exists because it is the default.
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(),
   );
 
   static const _kAccessToken = 'orthocare_access_token';
