@@ -38,7 +38,7 @@ class NurseManagementScreen extends ConsumerWidget {
                   subtitle: Text(n.phone),
                   trailing: Chip(
                     label: Text(n.active ? 'Active' : 'Inactive'),
-                    backgroundColor: n.active ? Colors.green.withOpacity(0.15) : null,
+                    backgroundColor: n.active ? Colors.green.withValues(alpha: 0.15) : null,
                   ),
                   onTap: () => _showNurseForm(context, ref, existing: n),
                 );

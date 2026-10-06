@@ -82,7 +82,7 @@ class _ResolutionFormSheetState extends State<_ResolutionFormSheet> {
               onChanged: (v) => setState(() => _patientContacted = v),
             ),
             DropdownButtonFormField<String>(
-              value: _issueCategory,
+              initialValue: _issueCategory,
               decoration: const InputDecoration(labelText: 'Issue category'),
               items: _issueCategories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               onChanged: (v) => setState(() => _issueCategory = v ?? _issueCategory),

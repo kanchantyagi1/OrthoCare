@@ -69,7 +69,7 @@ class ShiftManagementScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DropdownButtonFormField<String>(
-                value: nurseId,
+                initialValue: nurseId,
                 decoration: const InputDecoration(labelText: 'Nurse'),
                 items: nurses.map((n) => DropdownMenuItem(value: n.id, child: Text(n.name))).toList(),
                 onChanged: (v) => setState(() => nurseId = v),

@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/network/api_client.dart';
 import '../../models/chat_message.dart';
 import '../../models/escalation.dart';
 import '../auth/auth_controller.dart';

@@ -6,6 +6,7 @@ import '../../models/document.dart';
 import '../../models/escalation.dart';
 import '../../models/nurse_summary.dart';
 import '../../models/shift.dart';
+import '../auth/auth_controller.dart';
 
 final adminDashboardProvider = FutureProvider.autoDispose<AdminDashboardStats>((ref) async {
   final api = ref.watch(apiClientProvider);
