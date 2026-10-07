@@ -30,9 +30,11 @@ class AppUser {
     this.surgeryDate,
   });
 
+  /// The API returns `fullName`; `name` is accepted as a fallback. Reading only
+  /// `name` left this empty, so the nurse dashboard greeted people with "Hello ".
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
         id: json['id'] as String,
-        name: json['name'] as String? ?? '',
+        name: (json['fullName'] ?? json['name']) as String? ?? '',
         role: roleFromString(json['role'] as String),
         surgeryType: json['surgeryType'] as String?,
         surgeryDate: json['surgeryDate'] as String?,

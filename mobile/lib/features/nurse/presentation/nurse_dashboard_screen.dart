@@ -34,7 +34,9 @@ class NurseDashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Hello ${user?.name ?? 'Nurse'}'),
+        // Guard on empty, not just null: an absent name arrives as '' and
+        // rendered a bare "Hello ".
+        title: Text('Hello ${(user?.name.isNotEmpty ?? false) ? user!.name : 'Nurse'}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline),
