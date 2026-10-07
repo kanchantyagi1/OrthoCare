@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_client.dart';
@@ -56,24 +57,45 @@ class AdminActions {
   AdminActions(this._ref);
   ApiClient get _api => _ref.read(apiClientProvider);
 
-  Future<void> createNurse({required String name, required String phone, required String password}) =>
-      _api.post('/nurses', data: {'name': name, 'phone': phone, 'password': password});
+  // Field names below must match the backend DTOs exactly: NestJS runs its
+  // ValidationPipe with forbidNonWhitelisted, so an unexpected key is rejected
+  // outright with "property <name> should not exist".
+  Future<void> createNurse({
+    required String email,
+    required String fullName,
+    required String phone,
+    required String password,
+  }) =>
+      _api.post('/nurses', data: {
+        'email': email,
+        'fullName': fullName,
+        'phone': phone,
+        'password': password,
+      });
 
-  Future<void> updateNurse(String id, {required String name, required String phone, required bool active}) =>
-      _api.put('/nurses/$id', data: {'name': name, 'phone': phone, 'active': active});
+  Future<void> updateNurse(String id, {required String fullName, required String phone, required bool isActive}) =>
+      _api.put('/nurses/$id', data: {'fullName': fullName, 'phone': phone, 'isActive': isActive});
 
   Future<void> deleteNurse(String id) => _api.delete('/nurses/$id');
 
-  Future<void> createShift({required String nurseId, required DateTime start, required DateTime end}) =>
+  // Shifts are daily "HH:mm" windows, not datetimes - see models/shift.dart.
+  Future<void> createShift({
+    required String nurseId,
+    required TimeOfDay start,
+    required TimeOfDay end,
+    String? label,
+  }) =>
       _api.post('/shifts', data: {
         'nurseId': nurseId,
-        'startTime': start.toIso8601String(),
-        'endTime': end.toIso8601String(),
+        if (label != null && label.isNotEmpty) 'label': label,
+        'startTime': Shift.toHhMm(start.hour, start.minute),
+        'endTime': Shift.toHhMm(end.hour, end.minute),
       });
 
-  Future<void> updateShift(String id, {required DateTime start, required DateTime end}) => _api.put('/shifts/$id', data: {
-        'startTime': start.toIso8601String(),
-        'endTime': end.toIso8601String(),
+  Future<void> updateShift(String id, {required TimeOfDay start, required TimeOfDay end}) =>
+      _api.put('/shifts/$id', data: {
+        'startTime': Shift.toHhMm(start.hour, start.minute),
+        'endTime': Shift.toHhMm(end.hour, end.minute),
       });
 
   Future<void> deleteShift(String id) => _api.delete('/shifts/$id');

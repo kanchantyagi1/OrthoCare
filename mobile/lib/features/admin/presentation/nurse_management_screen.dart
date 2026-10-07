@@ -53,6 +53,7 @@ class NurseManagementScreen extends ConsumerWidget {
   void _showNurseForm(BuildContext context, WidgetRef ref, {NurseSummary? existing}) {
     final nameController = TextEditingController(text: existing?.name);
     final phoneController = TextEditingController(text: existing?.phone);
+    final emailController = TextEditingController();
     final passwordController = TextEditingController();
     bool active = existing?.active ?? true;
 
@@ -66,6 +67,14 @@ class NurseManagementScreen extends ConsumerWidget {
             children: [
               TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Name')),
               TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone')),
+              // Email is the nurse's account identity on the backend; she can sign
+              // in with either this or her phone number.
+              if (existing == null)
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  keyboardType: TextInputType.emailAddress,
+                ),
               if (existing == null)
                 TextField(
                   controller: passwordController,
@@ -88,12 +97,18 @@ class NurseManagementScreen extends ConsumerWidget {
                 final actions = ref.read(adminActionsProvider);
                 if (existing == null) {
                   await actions.createNurse(
-                    name: nameController.text.trim(),
+                    email: emailController.text.trim(),
+                    fullName: nameController.text.trim(),
                     phone: phoneController.text.trim(),
                     password: passwordController.text,
                   );
                 } else {
-                  await actions.updateNurse(existing.id, name: nameController.text.trim(), phone: phoneController.text.trim(), active: active);
+                  await actions.updateNurse(
+                    existing.id,
+                    fullName: nameController.text.trim(),
+                    phone: phoneController.text.trim(),
+                    isActive: active,
+                  );
                 }
                 ref.invalidate(nursesProvider);
                 if (context.mounted) Navigator.of(context).pop();

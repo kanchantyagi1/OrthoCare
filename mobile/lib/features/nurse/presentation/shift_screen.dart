@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../widgets/loading_overlay.dart';
 import '../nurse_controller.dart';
@@ -33,7 +32,7 @@ class ShiftScreen extends ConsumerWidget {
                       leading: const Icon(Icons.schedule_outlined),
                       title: const Text('Shift window'),
                       subtitle: Text(
-                        '${DateFormat.jm().format(shift.startTime)} – ${DateFormat.jm().format(shift.endTime)}',
+                        shift.rangeLabel,
                       ),
                     ),
                     ListTile(

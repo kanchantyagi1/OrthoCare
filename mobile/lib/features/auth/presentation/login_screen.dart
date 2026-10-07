@@ -59,10 +59,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     Icon(Icons.health_and_safety_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(height: 12),
-                    Text('Welcome to OrthoCare AI', style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
+                    Text('Clinic staff sign in', style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
                     const SizedBox(height: 4),
                     Text(
-                      'Sign in to continue',
+                      'For nurses, doctors and clinic admins. Patients do not need an account.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Theme.of(context).colorScheme.outline),
                     ),

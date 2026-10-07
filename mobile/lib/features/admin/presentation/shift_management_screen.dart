@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../models/nurse_summary.dart';
 import '../../../widgets/loading_overlay.dart';
@@ -37,7 +36,7 @@ class ShiftManagementScreen extends ConsumerWidget {
                 return ListTile(
                   leading: const Icon(Icons.schedule_outlined),
                   title: Text(s.nurseName),
-                  subtitle: Text('${DateFormat.jm().format(s.startTime)} – ${DateFormat.jm().format(s.endTime)}'),
+                  subtitle: Text(s.rangeLabel),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () async {
@@ -98,10 +97,7 @@ class ShiftManagementScreen extends ConsumerWidget {
               onPressed: nurseId == null
                   ? null
                   : () async {
-                      final now = DateTime.now();
-                      final startDt = DateTime(now.year, now.month, now.day, start.hour, start.minute);
-                      final endDt = DateTime(now.year, now.month, now.day, end.hour, end.minute);
-                      await ref.read(adminActionsProvider).createShift(nurseId: nurseId!, start: startDt, end: endDt);
+                      await ref.read(adminActionsProvider).createShift(nurseId: nurseId!, start: start, end: end);
                       ref.invalidate(shiftsProvider);
                       if (context.mounted) Navigator.of(context).pop();
                     },

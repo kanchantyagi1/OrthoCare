@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../patient/patient_session_controller.dart';
 import '../auth_controller.dart';
 
 class SplashScreen extends ConsumerWidget {
@@ -11,7 +12,9 @@ class SplashScreen extends ConsumerWidget {
     // Routing decision happens in AppRouter's redirect, driven by
     // authControllerProvider. This screen just shows a brief loading state
     // while the session is being restored from secure storage.
+    // Both sessions must finish restoring before the router can decide.
     ref.watch(authControllerProvider);
+    ref.watch(patientSessionProvider);
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Center(

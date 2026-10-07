@@ -2,19 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../auth/auth_controller.dart';
+import '../patient_session_controller.dart';
 
 class PatientDashboardScreen extends ConsumerWidget {
   const PatientDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authControllerProvider).user;
+    final session = ref.watch(patientSessionProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('OrthoCare AI'),
         actions: [
-          IconButton(icon: const Icon(Icons.logout), onPressed: () => ref.read(authControllerProvider.notifier).logout()),
+          // Patients have no account to log out of; this just forgets the
+          // phone number and chat session on this device.
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Finish',
+            onPressed: () async {
+              await ref.read(patientSessionProvider.notifier).end();
+              if (context.mounted) context.go('/welcome');
+            },
+          ),
         ],
       ),
       body: Padding(
@@ -22,7 +31,10 @@ class PatientDashboardScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Hi ${user?.name ?? 'there'} 👋', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Hi ${(session.name?.isNotEmpty ?? false) ? session.name : 'there'} 👋',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 4),
             Text(
               'AI Support. Human Care. Better Recovery.',

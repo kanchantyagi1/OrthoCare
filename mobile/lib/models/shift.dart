@@ -1,29 +1,61 @@
+import 'package:intl/intl.dart';
+
+/// A shift is a *daily recurring time-of-day window*, not a date range: the
+/// backend stores `startTime`/`endTime` as "HH:mm" strings (see spec section 30,
+/// e.g. 09:00-12:00). Passing those to DateTime.parse throws
+/// "FormatException: Invalid date format 00:00", so they stay strings here and
+/// comparisons are done lexicographically, which is valid for zero-padded HH:mm.
 class Shift {
   final String id;
   final String nurseId;
   final String nurseName;
-  final DateTime startTime;
-  final DateTime endTime;
+  final String? label;
+  final String startTime;
+  final String endTime;
 
   const Shift({
     required this.id,
     required this.nurseId,
     required this.nurseName,
+    this.label,
     required this.startTime,
     required this.endTime,
   });
 
   factory Shift.fromJson(Map<String, dynamic> json) => Shift(
         id: json['id'] as String,
-        nurseId: json['nurseId'] as String,
+        nurseId: json['nurseId'] as String? ?? '',
         nurseName: json['nurseName'] as String? ?? '',
-        startTime: DateTime.parse(json['startTime'] as String),
-        endTime: DateTime.parse(json['endTime'] as String),
+        label: json['label'] as String?,
+        startTime: json['startTime'] as String? ?? '00:00',
+        endTime: json['endTime'] as String? ?? '00:00',
       );
+
+  /// "09:00" -> "9:00 AM". Falls back to the raw value if it isn't HH:mm.
+  static String formatTime(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length != 2) return hhmm;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return hhmm;
+    return DateFormat.jm().format(DateTime(2000, 1, 1, hour, minute));
+  }
+
+  /// Converts a picked wall-clock time into the "HH:mm" the API expects.
+  static String toHhMm(int hour, int minute) =>
+      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+  String get startLabel => formatTime(startTime);
+  String get endLabel => formatTime(endTime);
+  String get rangeLabel => '$startLabel – $endLabel';
 
   bool get isActiveNow {
     final now = DateTime.now();
-    return now.isAfter(startTime) && now.isBefore(endTime);
+    final nowHhMm = toHhMm(now.hour, now.minute);
+    // A window whose end is at or before its start wraps past midnight.
+    return endTime.compareTo(startTime) > 0
+        ? nowHhMm.compareTo(startTime) >= 0 && nowHhMm.compareTo(endTime) < 0
+        : nowHhMm.compareTo(startTime) >= 0 || nowHhMm.compareTo(endTime) < 0;
   }
 }
 

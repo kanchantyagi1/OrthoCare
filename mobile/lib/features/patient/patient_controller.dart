@@ -3,17 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/chat_message.dart';
 import '../../models/escalation.dart';
 import '../auth/auth_controller.dart';
+import 'patient_session_controller.dart';
 
+// Patient requests carry the chat session id explicitly: patients are
+// account-less, so there is no JWT to identify them by.
 final chatHistoryProvider = FutureProvider.autoDispose<List<ChatSession>>((ref) async {
   final api = ref.watch(apiClientProvider);
-  final data = await api.get('/chat/history');
+  final sessionId = ref.watch(patientSessionProvider).sessionId;
+  if (sessionId == null) return [];
+  final data = await api.get('/chat/history', query: {'sessionId': sessionId});
   final items = data['items'] as List<dynamic>? ?? (data['data'] as List<dynamic>? ?? []);
   return items.map((e) => ChatSession.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final patientEscalationsProvider = FutureProvider.autoDispose<List<Escalation>>((ref) async {
   final api = ref.watch(apiClientProvider);
-  final data = await api.get('/escalations', query: {'scope': 'mine'});
+  final sessionId = ref.watch(patientSessionProvider).sessionId;
+  if (sessionId == null) return [];
+  final data = await api.get('/escalations', query: {'sessionId': sessionId});
   final items = data['items'] as List<dynamic>? ?? (data['data'] as List<dynamic>? ?? []);
   return items.map((e) => Escalation.fromJson(e as Map<String, dynamic>)).toList();
 });
@@ -52,12 +59,16 @@ class ChatController extends StateNotifier<ChatState> {
     );
   }
 
+  /// The patient's session is created when they enter their phone number
+  /// (see PatientSessionController) - there is nothing to create here, we just
+  /// adopt it. Chat is unreachable without one, enforced by the router.
   Future<void> _ensureSession() async {
     if (state.sessionId != null) return;
-    final api = _ref.read(apiClientProvider);
-    final user = _ref.read(authControllerProvider).user;
-    final data = await api.post('/chat/session', data: {'patientId': user?.id});
-    state = state.copyWith(sessionId: data['id'] as String? ?? data['sessionId'] as String?);
+    final sessionId = _ref.read(patientSessionProvider).sessionId;
+    if (sessionId == null) {
+      throw Exception('No patient session - enter a phone number to start chatting');
+    }
+    state = state.copyWith(sessionId: sessionId);
   }
 
   Future<void> sendMessage(String text) async {
@@ -105,7 +116,9 @@ class ChatController extends StateNotifier<ChatState> {
     if (aiMessage.escalationId != null) return aiMessage.escalationId;
     final api = _ref.read(apiClientProvider);
     final data = await api.post('/escalations', data: {
-      'chatSessionId': state.sessionId,
+      // The session identifies the (account-less) patient and carries the phone
+      // number the nurse will call back on.
+      'sessionId': state.sessionId,
       'chatMessageId': aiMessage.id,
       'reason': 'patient_not_satisfied',
     });
