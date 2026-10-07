@@ -49,9 +49,11 @@ class ChatController extends StateNotifier<ChatState> {
   final Ref _ref;
   ChatController(this._ref) : super(const ChatState());
 
+  /// `/chat/history` lists *sessions*; the messages of one thread come from
+  /// `/chat/messages`. Pointing this at history parsed session rows as messages.
   Future<void> loadSession(String sessionId) async {
     final api = _ref.read(apiClientProvider);
-    final data = await api.get('/chat/history', query: {'sessionId': sessionId});
+    final data = await api.get('/chat/messages', query: {'sessionId': sessionId});
     final items = data['items'] as List<dynamic>? ?? (data['messages'] as List<dynamic>? ?? []);
     state = state.copyWith(
       sessionId: sessionId,
@@ -89,14 +91,18 @@ class ChatController extends StateNotifier<ChatState> {
         'sessionId': state.sessionId,
         'message': text.trim(),
       });
-      final aiMessage = ChatMessage(
-        id: response['messageId'] as String? ?? 'ai-${DateTime.now().microsecondsSinceEpoch}',
-        sender: MessageSender.ai,
-        text: response['answer'] as String? ?? '',
-        createdAt: DateTime.now(),
-        needsHumanFollowUp: response['needsHuman'] as bool? ?? false,
-        escalationId: response['escalationId'] as String?,
-      );
+      // The reply is `{patientMessage, assistantMessage, duplicate}` - reading
+      // the envelope for an `answer` key yielded a blank AI bubble.
+      final assistant = response['assistantMessage'] as Map<String, dynamic>?;
+      final aiMessage = assistant != null
+          ? ChatMessage.fromJson(assistant)
+          : ChatMessage(
+              id: 'ai-${DateTime.now().microsecondsSinceEpoch}',
+              sender: MessageSender.ai,
+              text: response['answer'] as String? ?? '',
+              createdAt: DateTime.now(),
+              needsHumanFollowUp: response['needsHuman'] as bool? ?? false,
+            );
       state = state.copyWith(messages: [...state.messages, aiMessage], sending: false);
     } catch (e) {
       state = state.copyWith(sending: false, error: e.toString());
@@ -114,12 +120,26 @@ class ChatController extends StateNotifier<ChatState> {
   Future<String?> requestNurse(ChatMessage aiMessage) async {
     setHelpful(aiMessage.id, false);
     if (aiMessage.escalationId != null) return aiMessage.escalationId;
+
+    // `question` is required by the API, so send the patient turn this AI answer
+    // was replying to - that is what the nurse reads on the case screen.
+    final index = state.messages.indexWhere((m) => m.id == aiMessage.id);
+    String question = '';
+    for (var i = (index == -1 ? state.messages.length : index) - 1; i >= 0; i--) {
+      if (state.messages[i].sender == MessageSender.patient) {
+        question = state.messages[i].text;
+        break;
+      }
+    }
+
     final api = _ref.read(apiClientProvider);
     final data = await api.post('/escalations', data: {
       // The session identifies the (account-less) patient and carries the phone
       // number the nurse will call back on.
       'sessionId': state.sessionId,
       'chatMessageId': aiMessage.id,
+      'question': question.isEmpty ? 'Patient requested to speak to a nurse' : question,
+      'aiResponse': aiMessage.text,
       'reason': 'patient_not_satisfied',
     });
     return data['id'] as String?;

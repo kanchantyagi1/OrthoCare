@@ -16,6 +16,22 @@ class NurseDashboardScreen extends ConsumerWidget {
     final attendance = ref.watch(attendanceControllerProvider);
     final user = ref.watch(authControllerProvider).user;
 
+    // Without this, a failed punch-in updated no visible state and the button
+    // just looked dead. Surface the failure instead of swallowing it.
+    ref.listen(attendanceControllerProvider, (previous, next) {
+      final error = next.hasError ? next.error : null;
+      if (error == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Punch failed: $error'),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => ref.read(attendanceControllerProvider.notifier).refresh(),
+          ),
+        ),
+      );
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Hello ${user?.name ?? 'Nurse'}'),

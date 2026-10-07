@@ -66,11 +66,22 @@ class AttendanceController extends StateNotifier<AsyncValue<AttendanceRecord?>> 
     _loadToday();
   }
 
+  /// `GET /attendance/today` returns `{status, records:[...]}`, newest first -
+  /// not a bare record. "Punched in" means the newest record has no punchOut.
   Future<void> _loadToday() async {
     try {
       final api = _ref.read(apiClientProvider);
       final data = await api.get('/attendance/today');
-      state = AsyncValue.data(data['id'] == null ? null : AttendanceRecord.fromJson(data));
+      final records = data['records'] as List<dynamic>? ?? const [];
+      Map<String, dynamic>? open;
+      for (final row in records) {
+        final r = row as Map<String, dynamic>;
+        if (r['punchOut'] == null) {
+          open = r;
+          break;
+        }
+      }
+      state = AsyncValue.data(open == null ? null : AttendanceRecord.fromJson(open));
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -78,13 +89,25 @@ class AttendanceController extends StateNotifier<AsyncValue<AttendanceRecord?>> 
 
   Future<void> refresh() => _loadToday();
 
+  /// Punch in/out both reply `{attendance: {...}, duplicate: bool}`; the record
+  /// is nested, so parsing the envelope itself threw
+  /// "type 'Null' is not a subtype of type 'String'" and the button appeared dead.
+  static AttendanceRecord? _recordFrom(Map<String, dynamic> body) {
+    final record = body['attendance'] as Map<String, dynamic>? ?? body;
+    if (record['id'] == null) return null;
+    return AttendanceRecord.fromJson(record);
+  }
+
   Future<void> punchIn() async {
     if (_busy) return; // idempotency guard against double-tap
     _busy = true;
+    state = const AsyncValue.loading(); // disables the button so the tap visibly registers
     try {
       final api = _ref.read(apiClientProvider);
       final data = await api.post('/attendance/punch-in');
-      state = AsyncValue.data(AttendanceRecord.fromJson(data));
+      state = AsyncValue.data(_recordFrom(data));
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     } finally {
       _busy = false;
     }
@@ -93,10 +116,14 @@ class AttendanceController extends StateNotifier<AsyncValue<AttendanceRecord?>> 
   Future<void> punchOut() async {
     if (_busy) return;
     _busy = true;
+    state = const AsyncValue.loading();
     try {
       final api = _ref.read(apiClientProvider);
       final data = await api.post('/attendance/punch-out');
-      state = AsyncValue.data(AttendanceRecord.fromJson(data));
+      // A completed punch-out has punchOut set, which flips status to OFFLINE.
+      state = AsyncValue.data(_recordFrom(data));
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     } finally {
       _busy = false;
     }

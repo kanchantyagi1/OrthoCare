@@ -19,18 +19,30 @@ class ChatMessage {
     this.helpful,
   });
 
+  /// The backend persists messages as `role` ('patient' | 'assistant') and
+  /// `message`; `sender`/`text` are accepted too so either shape parses.
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] as String,
-        sender: MessageSender.values.firstWhere(
-          (s) => s.name == (json['sender'] as String? ?? 'patient'),
-          orElse: () => MessageSender.patient,
-        ),
-        text: json['text'] as String? ?? '',
+        sender: _senderFrom((json['role'] ?? json['sender']) as String?),
+        text: (json['message'] ?? json['text']) as String? ?? '',
         createdAt: DateTime.parse(json['createdAt'] as String),
-        needsHumanFollowUp: json['needsHumanFollowUp'] as bool? ?? false,
+        needsHumanFollowUp:
+            (json['needsHuman'] ?? json['needsHumanFollowUp']) as bool? ?? false,
         escalationId: json['escalationId'] as String?,
         helpful: json['helpful'] as bool?,
       );
+
+  static MessageSender _senderFrom(String? value) {
+    switch (value) {
+      case 'assistant':
+      case 'ai':
+        return MessageSender.ai;
+      case 'system':
+        return MessageSender.system;
+      default:
+        return MessageSender.patient;
+    }
+  }
 
   ChatMessage copyWith({bool? helpful}) => ChatMessage(
         id: id,
