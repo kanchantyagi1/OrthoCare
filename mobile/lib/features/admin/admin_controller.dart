@@ -100,8 +100,20 @@ class AdminActions {
 
   Future<void> deleteShift(String id) => _api.delete('/shifts/$id');
 
-  Future<void> uploadDocument({required String filePath, required String fileName}) =>
-      _api.uploadFile('/knowledge/documents', filePath: filePath, fileName: fileName);
+  /// `title` is required by the API and is also the key documents are versioned
+  /// by, so it is derived from the file name: re-uploading "Knee_Protocol.pdf"
+  /// becomes v2 of that document rather than a second unrelated one.
+  Future<void> uploadDocument({required String filePath, required String fileName}) {
+    final title = fileName.contains('.')
+        ? fileName.substring(0, fileName.lastIndexOf('.'))
+        : fileName;
+    return _api.uploadFile(
+      '/knowledge/documents',
+      filePath: filePath,
+      fileName: fileName,
+      fields: {'title': title},
+    );
+  }
 
   Future<void> activateDocument(String id) => _api.post('/knowledge/documents/$id/activate');
   Future<void> archiveDocument(String id) => _api.post('/knowledge/documents/$id/archive');

@@ -155,7 +155,9 @@ class EscalationActions {
       'resolution': resolutionNotes,
       'followUpRequired': followUpRequired,
       'escalateToDoctor': escalateToDoctor,
-      'nurseNotes': nurseNotes,
+      // API field is `notes`; sending `nurseNotes` was rejected outright by
+      // ValidationPipe's forbidNonWhitelisted.
+      'notes': nurseNotes,
     });
   }
 
