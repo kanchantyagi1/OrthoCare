@@ -12,13 +12,13 @@ management and a role-gated admin/doctor dashboard are part of the same system.
 ## Architecture at a glance
 
 ```
-Patient (Flutter app)
+Patient (Flutter app - NO login: enters a phone number once)
    -> AI Chat -> Backend (NestJS) -> pgvector similarity search over approved clinic chunks
              -> GPT-4.1 mini answers ONLY from retrieved chunks (never invents medical info)
              -> if unsupported / patient says "not helpful" -> Escalation created
              -> currently active (punched-in, on-shift) Nurse is found and notified via FCM
-Nurse (same Flutter app, nurse role)
-   -> sees case, calls patient, records resolution
+Nurse (same Flutter app, staff login)
+   -> sees case, calls the patient on the number they gave, records resolution
 Admin/Doctor (same Flutter app, admin/doctor role)
    -> uploads clinic PDFs/DOCX -> ingestion pipeline (extract -> chunk -> embed -> pgvector)
    -> reviews/activates documents and demo knowledge, manages nurses/shifts, views dashboard
@@ -52,6 +52,19 @@ orthocare/  (this repo — currently at D:\VadayAI Solutions\CareOrtho)
 There is intentionally **no separate web admin app** — the admin/doctor screens (dashboard, nurse
 management, shift management, attendance, escalations, document knowledge base) are additional
 role-gated screens inside the same Flutter app that patients and nurses use.
+
+### Patients have no accounts
+
+Only clinic staff (nurse / doctor / admin) sign in. A patient opens the app, enters a **phone
+number once** — no password, no email, no account — and starts chatting. That number is the
+patient's identity for the session and the number a nurse calls back on if the AI escalates, so
+there is no separate "how do we reach you" step later. The chat session id the server returns is
+the patient's only credential: it is held in the device's secure storage and sent explicitly on
+every patient request.
+
+Consequence to be aware of: the patient chat endpoints are therefore **public**, with a real
+OpenAI key behind them, so they are rate-limited per phone number and per IP. Review those limits
+before publicising the app's address.
 
 ## Current status (honest)
 

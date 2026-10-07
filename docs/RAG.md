@@ -48,10 +48,33 @@ await this.dataSource.query(
 
 ### The threshold is mock-mode-aware
 
-`RAG_SIMILARITY_THRESHOLD` has no fixed default in `.env.example`. `configuration.ts` picks:
-- **0.72** when a real `OPENAI_API_KEY` is configured — a reasonable cutoff for genuine `text-embedding-3-small` cosine similarities between a short question and a relevant passage.
+`configuration.ts` auto-selects a default, but an explicitly set `RAG_SIMILARITY_THRESHOLD` env var always wins:
+- **0.72** when a real `OPENAI_API_KEY` is configured.
 - **0.25** when running in mock mode (no API key) — the mock embedding (below) is a crude bag-of-words hash whose cosine similarities for a short query against a longer, genuinely relevant passage typically land around 0.25–0.4, nowhere near what a real embedding model produces. Using the production threshold in mock mode would make the chatbot escalate on *every* question, which defeats the point of having a mock mode for local development and demos.
-- An explicitly set `RAG_SIMILARITY_THRESHOLD` env var always wins over both defaults.
+
+### ⚠️ The 0.72 real-embedding default is too strict — measured, not theorised
+
+When the deployment first switched to a real `OPENAI_API_KEY`, **every** question escalated with
+`insufficient_context` and zero retrieved chunks. The retrieval wasn't broken; 0.72 was simply
+unreachable. Measured cosine similarities against the demo pack with real `text-embedding-3-small`
+vectors, for *"Can I walk after knee replacement surgery?"*:
+
+```
+0.600  0.559  0.466  0.427  0.322
+```
+
+Clearly on-topic chunks land roughly **0.47–0.67**; the irrelevant tail sits below ~0.43. Nothing
+came close to 0.72. The deployment therefore pins `RAG_SIMILARITY_THRESHOLD=0.45`, which was then
+verified both ways: an on-topic question ("When can I start exercise after my surgery?") returned
+`supported` with real sources, while a medication-dosage question with no approved knowledge still
+returned `insufficient_context` and escalated — i.e. lowering the threshold did **not** weaken the
+medical-safety property.
+
+Re-tune after real clinic PDFs replace the demo pack: longer and more varied documents shift the
+distribution. The failure modes in each direction are asymmetric and worth naming — too **high**
+and the assistant escalates everything (annoying, and it buries nurses in avoidable tickets); too
+**low** and it answers from loosely-related passages, which in a medical app is a safety risk. When
+in doubt, prefer the escalation.
 
 ## Mock mode (no OPENAI_API_KEY)
 
