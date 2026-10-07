@@ -76,23 +76,23 @@ async function run() {
     });
   }
 
-  let patient = await patients.findAll().then((p) => p.find((x) => x.user?.email === 'patient@orthocare.demo'));
-  if (!patient) {
-    patient = await patients.create({
-      email: 'patient@orthocare.demo',
-      password: 'Password123!',
-      fullName: 'Rahul Sharma',
-      surgeryType: 'Knee Replacement',
-      surgeryDate: '2026-09-20',
-      doctorId: doctor.id,
-    });
+  // Patients have no login: they are identified by phone number alone. This seeds the
+  // same account-less row the app creates when a patient taps through and types their
+  // number, so the demo flow matches production exactly.
+  const demoPatientPhone = '9000000001';
+  const patient = await patients.findOrCreateByPhone(demoPatientPhone, 'Rahul Sharma');
+  if (!patient.surgeryType) {
+    patient.surgeryType = 'Knee Replacement';
+    patient.surgeryDate = '2026-09-20';
+    patient.doctorId = doctor.id;
+    await patients.repository.save(patient);
   }
 
-  console.log('Demo accounts ready:');
+  console.log('Demo staff logins (patients do NOT log in):');
   console.log('  admin@orthocare.demo / Password123!');
   console.log('  doctor@orthocare.demo / Password123!');
   console.log('  nurse@orthocare.demo / Password123! (shift 00:00-23:59, not punched in yet)');
-  console.log('  patient@orthocare.demo / Password123!');
+  console.log(`Demo patient: no account - just enter phone ${demoPatientPhone} in the app`);
 
   console.log('--- Seeding demo knowledge pack (DEMO_REVIEW_REQUIRED, not ACTIVE) ---');
 

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ClinicDocument } from './entities/document.entity';
 import { DocumentVersion } from './entities/document-version.entity';
 import { DocumentStatus } from '../../common/enums/document-status.enum';
@@ -12,6 +12,7 @@ import { extractPdf } from './extraction/pdf-extractor';
 import { extractDocx } from './extraction/docx-extractor';
 import { chunkDocxBlocks, chunkPdfPages } from './chunking/chunker';
 import { UploadDocumentDto } from './dto/upload-document.dto';
+import { DocumentListItem, toDocumentListItem } from './documents.mapper';
 
 const PDF_MIME = 'application/pdf';
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -27,6 +28,39 @@ export class DocumentsService {
     private readonly knowledge: KnowledgeService,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * Flat rows for the admin Knowledge Base table. Each row stitches the document
+   * together with its newest version and the uploader's name - the client needs
+   * fileName/version/chunkCount/uploadedAt, none of which live on `documents`.
+   */
+  async listForAdmin(): Promise<DocumentListItem[]> {
+    const documents = await this.documentRepo.find({
+      order: { createdAt: 'DESC' },
+      relations: ['uploadedBy'],
+    });
+    if (!documents.length) return [];
+
+    const versions = await this.versionRepo.find({
+      where: { documentId: In(documents.map((d) => d.id)) },
+      order: { createdAt: 'DESC' },
+    });
+
+    return documents.map((document) => {
+      const docVersions = versions.filter((v) => v.documentId === document.id);
+      const current =
+        docVersions.find((v) => v.id === document.currentVersionId) ?? docVersions[0] ?? null;
+      return toDocumentListItem(document, current, document.uploadedBy?.fullName);
+    });
+  }
+
+  async detailForAdmin(id: string): Promise<DocumentListItem> {
+    const document = await this.documentRepo.findOne({ where: { id }, relations: ['uploadedBy'] });
+    if (!document) throw new NotFoundException('Document not found');
+    const versions = await this.versionsFor(id);
+    const current = versions.find((v) => v.id === document.currentVersionId) ?? versions[0] ?? null;
+    return toDocumentListItem(document, current, document.uploadedBy?.fullName);
+  }
 
   findAll() {
     return this.documentRepo.find({ order: { createdAt: 'DESC' } });

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -13,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEvent } from '../../common/enums/audit-event.enum';
 import { AiConfidence, EscalationPriority } from '../../common/enums/escalation.enum';
 import { SAFE_ESCALATION_MESSAGE } from '../ai/system-prompt';
+import { toChatSessionListItem } from './chat.mapper';
 
 const PRIORITY_RANK: Record<EscalationPriority, number> = {
   [EscalationPriority.NORMAL]: 0,
@@ -40,21 +41,65 @@ export class ChatService {
     return this.sessionRepo.save(this.sessionRepo.create({ patientId, status: 'OPEN' }));
   }
 
+  /**
+   * Resolves a session id to its session. This is the only credential an
+   * account-less patient has, so every public endpoint goes through here and then
+   * works strictly from the returned session's patientId - never from anything the
+   * caller supplied.
+   */
+  async getSessionOrThrowById(sessionId: string) {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) throw new NotFoundException('Chat session not found');
+    return session;
+  }
+
+  /** Messages of one session, oldest first - what the chat screen replays on open. */
+  async messagesForSession(sessionId: string) {
+    await this.getSessionOrThrowById(sessionId);
+    return this.messageRepo.find({ where: { sessionId }, order: { createdAt: 'ASC' } });
+  }
+
   async history(patientId: string) {
     const sessions = await this.sessionRepo.find({
       where: { patientId },
       order: { createdAt: 'DESC' },
     });
-    const sessionsWithMessages = await Promise.all(
-      sessions.map(async (session) => ({
-        session,
-        messages: await this.messageRepo.find({
+
+    return Promise.all(
+      sessions.map(async (session) => {
+        const lastMessage = await this.messageRepo.findOne({
           where: { sessionId: session.id },
-          order: { createdAt: 'ASC' },
-        }),
-      })),
+          order: { createdAt: 'DESC' },
+        });
+        return toChatSessionListItem(session, lastMessage);
+      }),
     );
-    return sessionsWithMessages;
+  }
+
+  /**
+   * Rejects a patient who has already burned the day's message allowance. Lives
+   * outside sendMessage() so it is an explicit controller-level admission check on
+   * the public endpoint, rather than something buried in the answer pipeline.
+   */
+  async assertDailyQuotaRemaining(patientId: string) {
+    const cap = this.config.get<number>('patientLimits.dailyMessageCap', 40);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const used = await this.messageRepo
+      .createQueryBuilder('m')
+      .innerJoin(ChatSession, 's', 's.id = m.session_id')
+      .where('s.patient_id = :patientId', { patientId })
+      .andWhere('m.role = :role', { role: 'patient' })
+      .andWhere('m.created_at >= :startOfDay', { startOfDay })
+      .getCount();
+
+    if (used >= cap) {
+      throw new HttpException(
+        'You have reached the daily limit for questions. Please contact the clinic directly if you need help today.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   }
 
   private async getSessionOrThrow(sessionId: string, patientId: string) {
@@ -159,6 +204,24 @@ export class ChatService {
     }
 
     return { patientMessage, assistantMessage, duplicate: false };
+  }
+
+  /**
+   * Public-endpoint wrapper: refuses to rate a message that does not belong to the
+   * caller's own conversation, so a leaked/guessed message id cannot be used to
+   * poke at someone else's chat.
+   */
+  async submitFeedbackForSession(
+    patientId: string,
+    sessionId: string,
+    messageId: string,
+    helpful: boolean,
+  ) {
+    const message = await this.messageRepo.findOne({ where: { id: messageId } });
+    if (!message || message.sessionId !== sessionId) {
+      throw new NotFoundException('Message not found');
+    }
+    return this.submitFeedback(patientId, messageId, helpful);
   }
 
   /** "Was this helpful?" - a "No" always creates/confirms a human escalation, even if the AI was confident. */

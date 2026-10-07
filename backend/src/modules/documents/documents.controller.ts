@@ -26,14 +26,17 @@ export class DocumentsController {
 
   @Get()
   findAll() {
-    return this.documents.findAll();
+    return this.documents.listForAdmin();
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    const document = await this.documents.findOne(id);
-    const versions = await this.documents.versionsFor(id);
-    return { document, versions };
+  findOne(@Param('id') id: string) {
+    return this.documents.detailForAdmin(id);
+  }
+
+  @Get(':id/versions')
+  versions(@Param('id') id: string) {
+    return this.documents.versionsFor(id);
   }
 
   @Post()

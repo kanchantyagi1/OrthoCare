@@ -1,32 +1,43 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { StaffOrPatientSessionGuard } from '../../common/guards/staff-or-patient-session.guard';
+import { PatientThrottlerGuard } from '../../common/guards/patient-throttler.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { EscalationsService } from './escalations.service';
 import { NursesService } from '../nurses/nurses.service';
-import { PatientsService } from '../patients/patients.service';
 import { CreateEscalationDto } from './dto/create-escalation.dto';
 import { ResolveEscalationDto } from './dto/resolve-escalation.dto';
 import { EscalationStatus } from '../../common/enums/escalation.enum';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+/**
+ * Guards are declared per-route rather than on the class, because patients have no
+ * account: the "request a nurse" and "my requests" routes are public and are
+ * authorised by possession of a chat session id, while every staff route still
+ * requires a JWT plus a role.
+ */
 @Controller('escalations')
 export class EscalationsController {
   constructor(
     private readonly escalations: EscalationsService,
     private readonly nurses: NursesService,
-    private readonly patients: PatientsService,
   ) {}
 
-  @Roles(Role.PATIENT)
+  /**
+   * PUBLIC - patient asks to be called by a nurse. The patient is derived from the
+   * session id; nothing patient-identifying in the body is trusted.
+   */
+  @UseGuards(PatientThrottlerGuard)
+  @Throttle({ default: { limit: 6, ttl: 3600000 } })
   @Post()
-  async create(@CurrentUser() user: { id: string }, @Body() dto: CreateEscalationDto) {
-    const patient = await this.patients.findByUserIdOrThrow(user.id);
+  async create(@Body() dto: CreateEscalationDto) {
+    const patientId = await this.escalations.resolvePatientIdFromSession(dto.sessionId);
     return this.escalations.create({
-      patientId: patient.id,
-      chatSessionId: dto.chatSessionId,
+      patientId,
+      chatSessionId: dto.sessionId,
       chatMessageId: dto.chatMessageId,
       question: dto.question,
       aiResponse: dto.aiResponse,
@@ -34,25 +45,40 @@ export class EscalationsController {
     });
   }
 
-  @Roles(Role.NURSE, Role.ADMIN, Role.DOCTOR)
+  /**
+   * Serves two audiences (see StaffOrPatientSessionGuard):
+   *  - `?sessionId=` (public): only the escalations of that session's patient.
+   *  - staff JWT: a nurse sees her assigned cases, admin/doctor see all.
+   */
+  @UseGuards(StaffOrPatientSessionGuard)
   @Get()
   async findAll(
-    @CurrentUser() user: { id: string; role: Role },
+    @CurrentUser() user: { id: string; role: Role } | undefined,
+    @Query('sessionId') sessionId?: string,
     @Query('status') status?: EscalationStatus,
   ) {
-    if (user.role === Role.NURSE) {
-      const nurse = await this.nurses.findByUserIdOrThrow(user.id);
-      return this.escalations.findAll({ status, nurseId: nurse.id });
+    if (sessionId) {
+      const patientId = await this.escalations.resolvePatientIdFromSession(sessionId);
+      return this.escalations.findAllViews({ patientId });
     }
-    return this.escalations.findAll({ status });
+
+    if (user?.role === Role.NURSE) {
+      const nurse = await this.nurses.findByUserIdOrThrow(user.id);
+      return this.escalations.findAllViews({ status, nurseId: nurse.id });
+    }
+    return this.escalations.findAllViews({ status });
   }
 
+  // Staff only: detail view is not exposed to patients at all, so a patient can
+  // never read a case by id - they only ever get their own list above.
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NURSE, Role.ADMIN, Role.DOCTOR)
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.escalations.findOne(id);
+    return this.escalations.findOneView(id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NURSE)
   @Post(':id/contact')
   async contact(@Param('id') id: string, @CurrentUser() user: { id: string }) {
@@ -60,6 +86,7 @@ export class EscalationsController {
     return this.escalations.markContacted(id, nurse.id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NURSE)
   @Post(':id/resolve')
   async resolve(
@@ -71,6 +98,7 @@ export class EscalationsController {
     return this.escalations.resolve(id, nurse.id, dto);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NURSE)
   @Post(':id/escalate-doctor')
   async escalateToDoctor(@Param('id') id: string, @CurrentUser() user: { id: string }) {

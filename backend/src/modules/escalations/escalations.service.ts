@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Escalation } from './entities/escalation.entity';
 import { NurseCaseNote } from './entities/nurse-case-note.entity';
 import { EscalationPriority, EscalationStatus } from '../../common/enums/escalation.enum';
@@ -13,6 +13,10 @@ import { AuditService } from '../audit/audit.service';
 import { AuditEvent } from '../../common/enums/audit-event.enum';
 import { ResolveEscalationDto } from './dto/resolve-escalation.dto';
 import { Role } from '../../common/enums/role.enum';
+import { ChatMessage } from '../chat/entities/chat-message.entity';
+import { ChatSession } from '../chat/entities/chat-session.entity';
+import { KnowledgeChunk } from '../knowledge/entities/knowledge-chunk.entity';
+import { EscalationSource, EscalationView, toEscalationView } from './escalations.mapper';
 
 @Injectable()
 export class EscalationsService {
@@ -27,7 +31,23 @@ export class EscalationsService {
     private readonly nurses: NursesService,
     private readonly patients: PatientsService,
     private readonly audit: AuditService,
+    // Injected directly rather than via ChatModule/KnowledgeModule: ChatModule already
+    // imports this module, so importing it back would be a circular dependency.
+    @InjectRepository(ChatMessage) private readonly messageRepo?: Repository<ChatMessage>,
+    @InjectRepository(KnowledgeChunk) private readonly chunkRepo?: Repository<KnowledgeChunk>,
+    @InjectRepository(ChatSession) private readonly sessionRepo?: Repository<ChatSession>,
   ) {}
+
+  /**
+   * Turns an account-less patient's session id into their patient id. The session id
+   * is the only credential such a patient has, so this is the single place that
+   * translation happens and callers must never accept a patient id from the request.
+   */
+  async resolvePatientIdFromSession(sessionId: string): Promise<string> {
+    const session = await this.sessionRepo?.findOne({ where: { id: sessionId } });
+    if (!session) throw new NotFoundException('Chat session not found');
+    return session.patientId;
+  }
 
   async create(params: {
     patientId: string;
@@ -86,7 +106,7 @@ export class EscalationsService {
 
     await this.notifications.notifyEscalationAssigned({
       nurseUser,
-      patientName: patient?.user?.fullName || 'a patient',
+      patientName: patient?.fullName || patient?.user?.fullName || 'a patient',
       priority: escalation.priority,
       escalationId: escalation.id,
     });
@@ -99,10 +119,11 @@ export class EscalationsService {
     return this.findOne(escalationId);
   }
 
-  async findAll(filter?: { status?: EscalationStatus; nurseId?: string }) {
+  async findAll(filter?: { status?: EscalationStatus; nurseId?: string; patientId?: string }) {
     const where: any = {};
     if (filter?.status) where.status = filter.status;
     if (filter?.nurseId) where.assignedNurseId = filter.nurseId;
+    if (filter?.patientId) where.patientId = filter.patientId;
     return this.repo.find({ where, order: { createdAt: 'DESC' } });
   }
 
@@ -110,6 +131,62 @@ export class EscalationsService {
     const escalation = await this.repo.findOne({ where: { id } });
     if (!escalation) throw new NotFoundException('Escalation not found');
     return escalation;
+  }
+
+  /** HTTP-shaped list (includes the patient's callable phone number and AI sources). */
+  async findAllViews(filter?: {
+    status?: EscalationStatus;
+    nurseId?: string;
+    patientId?: string;
+  }): Promise<EscalationView[]> {
+    const escalations = await this.findAll(filter);
+    return Promise.all(escalations.map((e) => this.toView(e)));
+  }
+
+  async findOneView(id: string): Promise<EscalationView> {
+    return this.toView(await this.findOne(id));
+  }
+
+  private async toView(escalation: Escalation): Promise<EscalationView> {
+    const patient = await this.patients.findOne(escalation.patientId);
+
+    let nurseName: string | null = null;
+    if (escalation.assignedNurseId) {
+      const nurse = await this.nurses.findOne(escalation.assignedNurseId);
+      nurseName = nurse?.user?.fullName ?? null;
+    }
+
+    return toEscalationView(escalation, patient, nurseName, await this.sourcesFor(escalation));
+  }
+
+  /**
+   * Resolves which approved clinic chunks the AI actually used, so the nurse can see
+   * what the patient was told and where it came from (spec section 24/32).
+   */
+  private async sourcesFor(escalation: Escalation): Promise<EscalationSource[]> {
+    if (!escalation.chatMessageId || !this.messageRepo || !this.chunkRepo) return [];
+
+    const message = await this.messageRepo.findOne({ where: { id: escalation.chatMessageId } });
+    const chunkIds = message?.sourceChunkIds ?? [];
+    if (!chunkIds.length) return [];
+
+    const chunks = await this.chunkRepo.find({ where: { id: In(chunkIds) } });
+    const scores = message?.similarityScores ?? [];
+
+    // Preserve the order the AI cited them in; scores are recorded positionally.
+    return chunkIds
+      .map((chunkId, index) => {
+        const chunk = chunks.find((c) => c.id === chunkId);
+        if (!chunk) return null;
+        return {
+          documentId: chunk.documentId,
+          fileName: chunk.fileName,
+          pageNumber: chunk.pageNumber ?? null,
+          sectionTitle: chunk.sectionTitle ?? null,
+          similarityScore: typeof scores[index] === 'number' ? scores[index] : null,
+        };
+      })
+      .filter((s): s is EscalationSource => s !== null);
   }
 
   async markContacted(escalationId: string, nurseId: string) {

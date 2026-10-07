@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { UpdateShiftDto } from './dto/update-shift.dto';
+import { ShiftListItem, toShiftListItem } from './shifts.mapper';
 
 @Injectable()
 export class ShiftsService {
@@ -11,6 +12,12 @@ export class ShiftsService {
 
   findAll() {
     return this.repo.find({ order: { startTime: 'ASC' } });
+  }
+
+  /** Flat rows including the nurse's name; times stay as "HH:mm" strings. */
+  async listForApi(): Promise<ShiftListItem[]> {
+    const shifts = await this.repo.find({ relations: ['nurse', 'nurse.user'], order: { startTime: 'ASC' } });
+    return shifts.map(toShiftListItem);
   }
 
   findForNurse(nurseId: string) {

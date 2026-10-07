@@ -5,6 +5,7 @@ import { Nurse } from './entities/nurse.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../../common/enums/role.enum';
 import { AuthService } from '../auth/auth.service';
+import { NurseListItem, toNurseListItem } from './nurses.mapper';
 
 @Injectable()
 export class NursesService {
@@ -25,6 +26,12 @@ export class NursesService {
 
   findAll() {
     return this.repo.find({ relations: ['user'] });
+  }
+
+  /** Flat rows for the admin Nurse Management screen. */
+  async listForAdmin(): Promise<NurseListItem[]> {
+    const nurses = await this.repo.find({ relations: ['user'] });
+    return nurses.map(toNurseListItem);
   }
 
   findOne(id: string) {

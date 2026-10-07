@@ -27,6 +27,8 @@ import { HealthController } from './health.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    // Global per-IP ceiling. The public (login-less) patient chat routes layer
+    // tighter per-phone/per-session limits on top - see PatientThrottlerGuard.
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

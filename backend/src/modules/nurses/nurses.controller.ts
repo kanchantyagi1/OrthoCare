@@ -15,7 +15,7 @@ export class NursesController {
   @Roles(Role.ADMIN, Role.DOCTOR)
   @Get()
   findAll() {
-    return this.nurses.findAll();
+    return this.nurses.listForAdmin();
   }
 
   @Roles(Role.ADMIN, Role.DOCTOR)

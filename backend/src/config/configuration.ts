@@ -39,6 +39,23 @@ export default () => ({
     documentRetentionDays: parseInt(process.env.DOCUMENT_RETENTION_DAYS || '3650', 10),
   },
 
+  // Patients have no login, so the chat endpoints are reachable by anyone on the
+  // internet with a paid OpenAI model behind them. These caps are the only thing
+  // standing between a stranger and the clinic's API bill - keep them conservative.
+  patientLimits: {
+    sessionsPerWindow: parseInt(process.env.PATIENT_SESSION_RATE_LIMIT || '5', 10),
+    sessionWindowMs: parseInt(process.env.PATIENT_SESSION_RATE_TTL_MS || '3600000', 10),
+    messagesPerWindow: parseInt(process.env.PATIENT_MESSAGE_RATE_LIMIT || '12', 10),
+    messageWindowMs: parseInt(process.env.PATIENT_MESSAGE_RATE_TTL_MS || '60000', 10),
+    dailyMessageCap: parseInt(process.env.PATIENT_DAILY_MESSAGE_CAP || '40', 10),
+  },
+
+  sla: {
+    // A case whose first nurse response took longer than this counts as a breach
+    // on the admin dashboard.
+    nurseFirstResponseMinutes: parseInt(process.env.NURSE_RESPONSE_SLA_MINUTES || '15', 10),
+  },
+
   rag: {
     topK: parseInt(process.env.RAG_TOP_K || '5', 10),
     // 0.72 is calibrated for real text-embedding-3-small cosine similarities. The mock

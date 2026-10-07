@@ -1,9 +1,13 @@
 import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateEscalationDto {
-  @IsOptional()
+  /**
+   * The patient's chat session. This is how an account-less patient is identified -
+   * the server derives the patient from it, and never accepts a patientId from the
+   * client.
+   */
   @IsUUID()
-  chatSessionId?: string;
+  sessionId: string;
 
   @IsOptional()
   @IsUUID()

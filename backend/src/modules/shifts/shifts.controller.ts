@@ -14,7 +14,7 @@ export class ShiftsController {
 
   @Get()
   findAll() {
-    return this.shifts.findAll();
+    return this.shifts.listForApi();
   }
 
   @Roles(Role.ADMIN, Role.DOCTOR)

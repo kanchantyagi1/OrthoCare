@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Attendance } from '../attendance/entities/attendance.entity';
@@ -30,6 +31,7 @@ export class DashboardService {
     @InjectRepository(ChatSession) private readonly sessionRepo: Repository<ChatSession>,
     @InjectRepository(ChatMessage) private readonly messageRepo: Repository<ChatMessage>,
     @InjectRepository(Shift) private readonly shiftRepo: Repository<Shift>,
+    private readonly config: ConfigService,
   ) {}
 
   /// Nurse-scoped counterpart to overview(), backing the nurse home screen
@@ -103,9 +105,10 @@ export class DashboardService {
 
     return {
       activeNurses,
-      patientChatsToday,
-      aiResolvedToday,
-      humanEscalationsToday: escalationsToday,
+      // Field names match what the admin dashboard cards read.
+      patientChats: patientChatsToday,
+      aiResolved: aiResolvedToday,
+      humanEscalations: escalationsToday,
       pending,
       urgent,
       nursePerformance: await this.nursePerformance(),
@@ -114,13 +117,17 @@ export class DashboardService {
 
   async nursePerformance() {
     const nurses = await this.nurseRepo.find({ relations: ['user'] });
+    const slaMs =
+      this.config.get<number>('sla.nurseFirstResponseMinutes', 15) * 60_000;
+
     const results: {
       nurseId: string;
-      name: string | undefined;
+      nurseName: string;
       assigned: number;
       resolved: number;
       pending: number;
-      avgResponseMinutes: number | null;
+      averageResponseMinutes: number;
+      slaBreaches: number;
     }[] = [];
 
     for (const nurse of nurses) {
@@ -133,13 +140,23 @@ export class DashboardService {
         .filter((e) => e.contactedAt && e.assignedAt)
         .map((e) => e.contactedAt!.getTime() - e.assignedAt!.getTime());
 
+      // A case still waiting past the SLA counts as breached too, not just slow
+      // ones that were eventually answered - otherwise ignoring a case looks clean.
+      const now = Date.now();
+      const slaBreaches = escalations.filter((e) => {
+        if (!e.assignedAt) return false;
+        const responded = e.contactedAt?.getTime();
+        return (responded ?? now) - e.assignedAt.getTime() > slaMs;
+      }).length;
+
       results.push({
         nurseId: nurse.id,
-        name: nurse.user?.fullName,
+        nurseName: nurse.user?.fullName || '',
         assigned: escalations.length,
         resolved: resolved.length,
         pending: pending.length,
-        avgResponseMinutes: avgMinutes(responseTimes),
+        averageResponseMinutes: avgMinutes(responseTimes) ?? 0,
+        slaBreaches,
       });
     }
     return results;
@@ -147,11 +164,19 @@ export class DashboardService {
 
   async attendanceReport() {
     const since = startOfToday();
-    return this.attendanceRepo
+    const rows = await this.attendanceRepo
       .createQueryBuilder('a')
+      .leftJoinAndSelect('a.nurse', 'nurse')
+      .leftJoinAndSelect('nurse.user', 'user')
       .where('a.punch_in >= :since', { since })
       .orderBy('a.punch_in', 'DESC')
       .getMany();
+
+    return rows.map((row) => ({
+      nurseName: row.nurse?.user?.fullName || '',
+      punchIn: row.punchIn.toISOString(),
+      punchOut: row.punchOut ? row.punchOut.toISOString() : null,
+    }));
   }
 
   async escalationsReport() {
