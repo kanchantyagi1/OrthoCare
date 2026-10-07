@@ -91,7 +91,12 @@ export class AiProviderService {
           ? parsed.priority
           : EscalationPriority.NORMAL,
         reason: parsed.reason || '',
-        sourceChunkIds: Array.isArray(parsed.source_chunk_ids) ? parsed.source_chunk_ids : [],
+        // The model generates these ids, so they are untrusted: it has been seen
+        // returning positional indices ("1", "2") instead of ids, and nothing stops
+        // it inventing one. Keep only ids belonging to chunks we actually supplied,
+        // so a citation can never point at a document this answer never saw and a
+        // non-UUID value can never reach a uuid column.
+        sourceChunkIds: this.validCitedChunkIds(parsed.source_chunk_ids, retrievedChunks),
       };
     } catch (err) {
       this.logger.error(`Chat completion failed: ${(err as Error).message}`);
@@ -128,5 +133,16 @@ export class AiProviderService {
       reason: 'answered_from_approved_knowledge_mock_mode',
       sourceChunkIds: chunks.map((c) => c.id),
     };
+  }
+
+  /**
+   * Narrows model-supplied citations to ids of chunks that were actually in the
+   * prompt. Anything else - a positional index, a hallucinated id, an id from a
+   * document outside this answer's context - is dropped.
+   */
+  private validCitedChunkIds(cited: unknown, chunks: RetrievedChunk[]): string[] {
+    if (!Array.isArray(cited)) return [];
+    const supplied = new Set(chunks.map((c) => c.id));
+    return cited.filter((id): id is string => typeof id === 'string' && supplied.has(id));
   }
 }

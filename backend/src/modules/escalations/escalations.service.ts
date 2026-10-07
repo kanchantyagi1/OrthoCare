@@ -18,6 +18,8 @@ import { ChatSession } from '../chat/entities/chat-session.entity';
 import { KnowledgeChunk } from '../knowledge/entities/knowledge-chunk.entity';
 import { EscalationSource, EscalationView, toEscalationView } from './escalations.mapper';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class EscalationsService {
   private readonly logger = new Logger(EscalationsService.name);
@@ -167,7 +169,11 @@ export class EscalationsService {
     if (!escalation.chatMessageId || !this.messageRepo || !this.chunkRepo) return [];
 
     const message = await this.messageRepo.findOne({ where: { id: escalation.chatMessageId } });
-    const chunkIds = message?.sourceChunkIds ?? [];
+    // Stored citations are model output, so they can be malformed - rows written in
+    // mock mode hold positional indices like "1". Passing one of those to a uuid
+    // column throws QueryFailedError and took down the whole case list (a 500 on
+    // GET /escalations for every nurse), so filter to well-formed uuids first.
+    const chunkIds = (message?.sourceChunkIds ?? []).filter((id) => UUID_PATTERN.test(id));
     if (!chunkIds.length) return [];
 
     const chunks = await this.chunkRepo.find({ where: { id: In(chunkIds) } });

@@ -27,6 +27,22 @@ describe('AiProviderService (mock mode - medical safety)', () => {
     expect(result.answer).toMatch(/connect your concern with the clinic team/i);
   });
 
+  it('drops model-supplied citations that are not ids of the chunks it was given', () => {
+    const ai = new AiProviderService(mockConfig());
+    const real = '11111111-2222-3333-4444-555555555555';
+    const chunks = [{ id: real, documentId: 'd', fileName: 'f.pdf', chunkText: 't' }] as any[];
+
+    // A real model has returned positional indices instead of ids, and could cite an
+    // id it was never shown. Either reaching the DB breaks the case list (uuid cast
+    // error) or leaks a document this answer never saw.
+    const filtered = (ai as any).validCitedChunkIds(
+      ['1', '2', real, '99999999-8888-7777-6666-555555555555', null, 42],
+      chunks,
+    );
+
+    expect(filtered).toEqual([real]);
+  });
+
   it('answers only from supplied approved chunks when context is available (supported)', async () => {
     const ai = new AiProviderService(mockConfig());
     const result = await ai.answerQuestion({
