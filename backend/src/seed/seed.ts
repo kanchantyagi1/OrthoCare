@@ -6,17 +6,22 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AppModule } from '../app.module';
 import { UsersService } from '../modules/users/users.service';
-import { DoctorsService } from '../modules/doctors/doctors.service';
-import { NursesService } from '../modules/nurses/nurses.service';
-import { PatientsService } from '../modules/patients/patients.service';
-import { ShiftsService } from '../modules/shifts/shifts.service';
 import { KnowledgeService } from '../modules/knowledge/knowledge.service';
-import { AuthService } from '../modules/auth/auth.service';
 import { ClinicDocument } from '../modules/documents/entities/document.entity';
 import { DocumentVersion } from '../modules/documents/entities/document-version.entity';
 import { DocumentStatus } from '../common/enums/document-status.enum';
 import { Role } from '../common/enums/role.enum';
 
+/**
+ * Seeds the demo orthopedic knowledge pack ONLY.
+ *
+ * Staff accounts are not created here - they come from `npm run reset:clinic`, which
+ * owns who can log in. Keeping the two separate means re-seeding knowledge can never
+ * silently resurrect a demo login on a real clinic deployment.
+ *
+ * Seeded documents land in DEMO_REVIEW_REQUIRED: a doctor or admin must explicitly
+ * activate each one before the assistant is allowed to answer from it.
+ */
 interface DemoRecord {
   title: string;
   surgeryType: string;
@@ -26,80 +31,38 @@ interface DemoRecord {
 }
 
 async function run() {
-  const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
+  const app = await NestFactory.createApplicationContext(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
 
   const users = app.get(UsersService);
-  const doctors = app.get(DoctorsService);
-  const nurses = app.get(NursesService);
-  const patients = app.get(PatientsService);
-  const shifts = app.get(ShiftsService);
   const knowledge = app.get(KnowledgeService);
   const documentRepo = app.get<Repository<ClinicDocument>>(getRepositoryToken(ClinicDocument));
   const versionRepo = app.get<Repository<DocumentVersion>>(getRepositoryToken(DocumentVersion));
 
-  console.log('--- Seeding demo accounts ---');
-
-  let admin = await users.findByEmail('admin@orthocare.demo');
-  if (!admin) {
-    admin = await users.create({
-      email: 'admin@orthocare.demo',
-      passwordHash: await AuthService.hashPassword('Password123!'),
-      fullName: 'Clinic Admin',
-      role: Role.ADMIN,
-    });
+  // Attribute seeded documents to an existing admin if there is one. Nullable by
+  // design, so seeding works on a clinic whose accounts have not been created yet.
+  const admins = await users.findByRole(Role.ADMIN);
+  const uploadedByUserId = admins[0]?.id;
+  if (!uploadedByUserId) {
+    console.log('No admin account exists yet - documents will show an unknown uploader.');
+    console.log('Run `npm run reset:clinic` first if you want them attributed.');
   }
-
-  let doctor = await doctors.findAll().then((d) => d.find((x) => x.user?.email === 'doctor@orthocare.demo'));
-  if (!doctor) {
-    doctor = await doctors.create({
-      email: 'doctor@orthocare.demo',
-      password: 'Password123!',
-      fullName: 'Dr. Asha Mehta',
-      specialization: 'Orthopedic Surgery',
-    });
-  }
-
-  let nurse = await nurses.findAll().then((n) => n.find((x) => x.user?.email === 'nurse@orthocare.demo'));
-  if (!nurse) {
-    nurse = await nurses.create({
-      email: 'nurse@orthocare.demo',
-      password: 'Password123!',
-      fullName: 'Priya Nair',
-      employeeCode: 'N-001',
-    });
-    // Wide-open demo shift so the seeded nurse is always "on shift" for manual/E2E testing.
-    await shifts.create({
-      nurseId: nurse.id,
-      label: 'Demo All-Day Shift',
-      startTime: '00:00',
-      endTime: '23:59',
-    });
-  }
-
-  // Patients have no login: they are identified by phone number alone. This seeds the
-  // same account-less row the app creates when a patient taps through and types their
-  // number, so the demo flow matches production exactly.
-  const demoPatientPhone = '9000000001';
-  const patient = await patients.findOrCreateByPhone(demoPatientPhone, 'Rahul Sharma');
-  if (!patient.surgeryType) {
-    patient.surgeryType = 'Knee Replacement';
-    patient.surgeryDate = '2026-09-20';
-    patient.doctorId = doctor.id;
-    await patients.repository.save(patient);
-  }
-
-  console.log('Demo staff logins (patients do NOT log in):');
-  console.log('  admin@orthocare.demo / Password123!');
-  console.log('  doctor@orthocare.demo / Password123!');
-  console.log('  nurse@orthocare.demo / Password123! (shift 00:00-23:59, not punched in yet)');
-  console.log(`Demo patient: no account - just enter phone ${demoPatientPhone} in the app`);
 
   console.log('--- Seeding demo knowledge pack (DEMO_REVIEW_REQUIRED, not ACTIVE) ---');
 
   // Prefer the repo-root copy (single source of truth for local/non-Docker runs);
   // fall back to the copy bundled inside backend/src/seed/ (Docker images only ever
   // get backend/'s own build context, not the sibling top-level knowledge/ folder).
-  const repoRootPackPath = path.join(__dirname, '..', '..', '..', 'knowledge', 'demo', 'demo-knowledge-pack.json');
+  const repoRootPackPath = path.join(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    'knowledge',
+    'demo',
+    'demo-knowledge-pack.json',
+  );
   const bundledPackPath = path.join(__dirname, 'demo-knowledge-pack.json');
   const packPath = fs.existsSync(repoRootPackPath) ? repoRootPackPath : bundledPackPath;
   const records: DemoRecord[] = JSON.parse(fs.readFileSync(packPath, 'utf-8'));
@@ -117,7 +80,7 @@ async function run() {
         surgeryType: record.surgeryType,
         category: record.category,
         status: DocumentStatus.DEMO_REVIEW_REQUIRED,
-        uploadedByUserId: admin.id,
+        uploadedByUserId,
       }),
     );
 
@@ -149,8 +112,8 @@ async function run() {
     console.log(`  seeded: ${record.title}`);
   }
 
-  console.log('--- Done. Demo knowledge is DEMO_REVIEW_REQUIRED - a doctor/admin must explicitly ---');
-  console.log('--- review and activate each document before the chatbot can use it.            ---');
+  console.log('--- Done. Demo knowledge is DEMO_REVIEW_REQUIRED - a doctor or admin must ---');
+  console.log('--- review and activate each document before the assistant can use it.   ---');
 
   await app.close();
 }

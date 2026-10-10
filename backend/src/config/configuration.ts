@@ -51,9 +51,14 @@ export default () => ({
   },
 
   sla: {
-    // A case whose first nurse response took longer than this counts as a breach
+    // A case whose first doctor response took longer than this counts as a breach
     // on the admin dashboard.
-    nurseFirstResponseMinutes: parseInt(process.env.NURSE_RESPONSE_SLA_MINUTES || '15', 10),
+    // NURSE_RESPONSE_SLA_MINUTES is still honoured so an already-deployed .env written
+    // before the staff rename keeps working instead of silently reverting to the default.
+    doctorFirstResponseMinutes: parseInt(
+      process.env.DOCTOR_RESPONSE_SLA_MINUTES || process.env.NURSE_RESPONSE_SLA_MINUTES || '15',
+      10,
+    ),
   },
 
   rag: {

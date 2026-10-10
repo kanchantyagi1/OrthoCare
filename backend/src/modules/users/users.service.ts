@@ -33,6 +33,10 @@ export class UsersService {
     return this.repo.save(user);
   }
 
+  async updatePassword(userId: string, passwordHash: string) {
+    await this.repo.update({ id: userId }, { passwordHash });
+  }
+
   async updateFcmToken(userId: string, token: string) {
     await this.repo.update({ id: userId }, { fcmToken: token });
   }

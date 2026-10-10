@@ -28,10 +28,12 @@ export class ClinicDocument extends BaseEntity {
   @Column({ name: 'current_version_id', nullable: true })
   currentVersionId?: string;
 
-  @ManyToOne(() => User)
+  // Nullable so a clinic document survives the removal of the staff account that
+  // uploaded it; the API renders a missing uploader as "Unknown".
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'uploaded_by_user_id' })
-  uploadedBy: User;
+  uploadedBy?: User;
 
-  @Column({ name: 'uploaded_by_user_id' })
-  uploadedByUserId: string;
+  @Column({ name: 'uploaded_by_user_id', nullable: true })
+  uploadedByUserId?: string;
 }

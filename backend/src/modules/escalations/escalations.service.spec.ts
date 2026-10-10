@@ -22,18 +22,18 @@ const fakeNotesRepo = { create: jest.fn((d: any) => d), save: jest.fn(async (d: 
 const fakeAudit = { record: jest.fn() };
 
 describe('EscalationsService', () => {
-  it('assigns the escalation to the current available nurse and notifies them', async () => {
+  it('assigns the escalation to the current available doctor and notifies them', async () => {
     const escalationRepo = fakeEscalationRepo();
-    const attendance = { getCurrentAvailableNurse: jest.fn(async () => ({ id: 'nurse-1', userId: 'user-1' })) };
+    const attendance = { getCurrentAvailableDoctor: jest.fn(async () => ({ id: 'doctor-1', userId: 'user-1' })) };
     const notifications = {
       notifyEscalationAssigned: jest.fn(async () => ({})),
-      notifyAdminsNoNurseAvailable: jest.fn(async () => {}),
+      notifyAdminsNoDoctorAvailable: jest.fn(async () => {}),
     };
     const users = {
       findByRole: jest.fn(async () => []),
       findById: jest.fn(async () => ({ id: 'user-1', fullName: 'Priya' })),
     };
-    const nurses = {};
+    const doctors = {};
     const patients = { findOne: jest.fn(async () => ({ id: 'patient-1', user: { fullName: 'Rahul' } })) };
 
     const service = new EscalationsService(
@@ -42,7 +42,7 @@ describe('EscalationsService', () => {
       attendance as any,
       notifications as any,
       users as any,
-      nurses as any,
+      doctors as any,
       patients as any,
       fakeAudit as any,
     );
@@ -55,19 +55,19 @@ describe('EscalationsService', () => {
     });
 
     expect(result.status).toBe(EscalationStatus.ASSIGNED);
-    expect(result.assignedNurseId).toBe('nurse-1');
+    expect(result.assignedDoctorId).toBe('doctor-1');
     expect(notifications.notifyEscalationAssigned).toHaveBeenCalled();
   });
 
-  it('leaves the escalation WAITING_FOR_NURSE and notifies admins when no nurse is available', async () => {
+  it('leaves the escalation WAITING_FOR_DOCTOR and notifies admins when no doctor is available', async () => {
     const escalationRepo = fakeEscalationRepo();
-    const attendance = { getCurrentAvailableNurse: jest.fn(async () => null) };
+    const attendance = { getCurrentAvailableDoctor: jest.fn(async () => null) };
     const notifications = {
       notifyEscalationAssigned: jest.fn(async () => ({})),
-      notifyAdminsNoNurseAvailable: jest.fn(async () => {}),
+      notifyAdminsNoDoctorAvailable: jest.fn(async () => {}),
     };
     const users = { findByRole: jest.fn(async () => [{ id: 'admin-1' }]), findById: jest.fn() };
-    const nurses = {};
+    const doctors = {};
     const patients = { findOne: jest.fn(async () => ({ id: 'patient-1', user: { fullName: 'Rahul' } })) };
 
     const service = new EscalationsService(
@@ -76,7 +76,7 @@ describe('EscalationsService', () => {
       attendance as any,
       notifications as any,
       users as any,
-      nurses as any,
+      doctors as any,
       patients as any,
       fakeAudit as any,
     );
@@ -87,8 +87,8 @@ describe('EscalationsService', () => {
       reason: 'patient_marked_not_helpful',
     });
 
-    expect(result.status).toBe(EscalationStatus.WAITING_FOR_NURSE);
-    expect(result.assignedNurseId).toBeUndefined();
-    expect(notifications.notifyAdminsNoNurseAvailable).toHaveBeenCalledWith([{ id: 'admin-1' }], result.id);
+    expect(result.status).toBe(EscalationStatus.WAITING_FOR_DOCTOR);
+    expect(result.assignedDoctorId).toBeUndefined();
+    expect(notifications.notifyAdminsNoDoctorAvailable).toHaveBeenCalledWith([{ id: 'admin-1' }], result.id);
   });
 });

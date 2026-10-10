@@ -22,8 +22,8 @@ export interface EscalationView {
   reason: string | null;
   priority: string;
   status: string;
-  assignedNurseId: string | null;
-  assignedNurseName: string | null;
+  assignedDoctorId: string | null;
+  assignedDoctorName: string | null;
   sources: EscalationSource[];
   createdAt: string;
   assignedAt: string | null;
@@ -32,14 +32,14 @@ export interface EscalationView {
 }
 
 /**
- * The nurse case screen needs a name and a *callable phone number* - that is the
+ * The doctor case screen needs a name and a *callable phone number* - that is the
  * whole point of account-less patients. Phone/name come from the patient row, with
  * a fallback to the linked user account for patients that predate the change.
  */
 export function toEscalationView(
   escalation: Escalation,
   patient?: Patient | null,
-  assignedNurseName?: string | null,
+  assignedDoctorName?: string | null,
   sources: EscalationSource[] = [],
 ): EscalationView {
   return {
@@ -55,8 +55,8 @@ export function toEscalationView(
     reason: escalation.reason ?? null,
     priority: escalation.priority,
     status: escalation.status,
-    assignedNurseId: escalation.assignedNurseId ?? null,
-    assignedNurseName: assignedNurseName ?? null,
+    assignedDoctorId: escalation.assignedDoctorId ?? null,
+    assignedDoctorName: assignedDoctorName ?? null,
     sources,
     createdAt: escalation.createdAt.toISOString(),
     assignedAt: escalation.assignedAt?.toISOString() ?? null,

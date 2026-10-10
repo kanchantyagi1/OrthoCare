@@ -12,7 +12,7 @@ import { CreatePatientDto } from './dto/create-patient.dto';
 export class PatientsController {
   constructor(private readonly patients: PatientsService) {}
 
-  @Roles(Role.ADMIN, Role.DOCTOR, Role.NURSE)
+  @Roles(Role.ADMIN, Role.DOCTOR)
   @Get()
   findAll() {
     return this.patients.findAll();

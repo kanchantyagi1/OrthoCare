@@ -4,7 +4,7 @@ import { EscalationPriority, EscalationStatus } from '../../../common/enums/esca
 import { Patient } from '../../patients/entities/patient.entity';
 import { ChatSession } from '../../chat/entities/chat-session.entity';
 import { ChatMessage } from '../../chat/entities/chat-message.entity';
-import { Nurse } from '../../nurses/entities/nurse.entity';
+import { Doctor } from '../../doctors/entities/doctor.entity';
 
 @Entity('escalations')
 export class Escalation extends BaseEntity {
@@ -41,17 +41,17 @@ export class Escalation extends BaseEntity {
   @Column({ type: 'enum', enum: EscalationPriority, default: EscalationPriority.NORMAL })
   priority: EscalationPriority;
 
-  @ManyToOne(() => Nurse, { onDelete: 'SET NULL', nullable: true })
-  @JoinColumn({ name: 'assigned_nurse_id' })
-  assignedNurse?: Nurse;
+  @ManyToOne(() => Doctor, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'assigned_doctor_id' })
+  assignedDoctor?: Doctor;
 
-  @Column({ name: 'assigned_nurse_id', nullable: true })
-  assignedNurseId?: string;
+  @Column({ name: 'assigned_doctor_id', nullable: true })
+  assignedDoctorId?: string;
 
   @Column({
     type: 'enum',
     enum: EscalationStatus,
-    default: EscalationStatus.WAITING_FOR_NURSE,
+    default: EscalationStatus.WAITING_FOR_DOCTOR,
   })
   status: EscalationStatus;
 

@@ -13,7 +13,7 @@ import { SessionScopedDto } from './dto/session-scoped.dto';
  * PUBLIC, UNAUTHENTICATED endpoints - patients have no account and never log in.
  *
  * A patient gives a phone number once; the returned `sessionId` (a server-generated
- * v4 UUID) is thereafter their only credential, and the nurse uses the phone number
+ * v4 UUID) is thereafter their only credential, and the doctor uses the phone number
  * to call them back when something is escalated.
  *
  * Because there is no login, every handler re-derives the patient from the session

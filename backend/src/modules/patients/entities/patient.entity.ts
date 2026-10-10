@@ -5,7 +5,7 @@ import { Doctor } from '../../doctors/entities/doctor.entity';
 
 /**
  * A patient has NO login. They identify themselves with a phone number only, which
- * is also how the nurse calls them back after an escalation, so `phone`/`fullName`
+ * is also how the doctor calls them back after an escalation, so `phone`/`fullName`
  * live on this row rather than on a user account.
  *
  * `user`/`userId` remain for the account-based patients that predate this change;
@@ -48,7 +48,7 @@ export class Patient extends BaseEntity {
     return this.fullName || this.user?.fullName || 'Patient';
   }
 
-  /** The number a nurse should call. */
+  /** The number a doctor should call. */
   get contactPhone(): string | undefined {
     return this.phone || this.user?.phone;
   }

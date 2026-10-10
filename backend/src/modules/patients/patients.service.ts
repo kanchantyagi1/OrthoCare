@@ -11,7 +11,7 @@ import { AuthService } from '../auth/auth.service';
  * resolves to the same patient row no matter how they typed it.
  *
  * This matters more than it looks: the phone number IS the patient's identity and the
- * number a nurse calls back, so "+91 98765 43210", "09876543210" and "9876543210"
+ * number a doctor calls back, so "+91 98765 43210", "09876543210" and "9876543210"
  * fragmenting into three patients would scatter one person's history and escalations.
  *
  * All non-digits are stripped, then any country code / trunk prefix is dropped by

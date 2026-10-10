@@ -2,12 +2,12 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Escalation } from './entities/escalation.entity';
-import { NurseCaseNote } from './entities/nurse-case-note.entity';
+import { DoctorCaseNote } from './entities/doctor-case-note.entity';
 import { EscalationPriority, EscalationStatus } from '../../common/enums/escalation.enum';
 import { AttendanceService } from '../attendance/attendance.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
-import { NursesService } from '../nurses/nurses.service';
+import { DoctorsService } from '../doctors/doctors.service';
 import { PatientsService } from '../patients/patients.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditEvent } from '../../common/enums/audit-event.enum';
@@ -26,11 +26,11 @@ export class EscalationsService {
 
   constructor(
     @InjectRepository(Escalation) private readonly repo: Repository<Escalation>,
-    @InjectRepository(NurseCaseNote) private readonly notesRepo: Repository<NurseCaseNote>,
+    @InjectRepository(DoctorCaseNote) private readonly notesRepo: Repository<DoctorCaseNote>,
     private readonly attendance: AttendanceService,
     private readonly notifications: NotificationsService,
     private readonly users: UsersService,
-    private readonly nurses: NursesService,
+    private readonly doctors: DoctorsService,
     private readonly patients: PatientsService,
     private readonly audit: AuditService,
     // Injected directly rather than via ChatModule/KnowledgeModule: ChatModule already
@@ -69,7 +69,7 @@ export class EscalationsService {
         aiResponse: params.aiResponse,
         reason: params.reason,
         priority: params.priority || EscalationPriority.NORMAL,
-        status: EscalationStatus.WAITING_FOR_NURSE,
+        status: EscalationStatus.WAITING_FOR_DOCTOR,
       }),
     );
 
@@ -78,36 +78,36 @@ export class EscalationsService {
       priority: escalation.priority,
     });
 
-    await this.assignToAvailableNurse(escalation.id);
+    await this.assignToAvailableDoctor(escalation.id);
     return this.findOne(escalation.id);
   }
 
-  /** Section 28: assigns to the current active nurse, or leaves WAITING_FOR_NURSE + notifies admins. */
-  async assignToAvailableNurse(escalationId: string) {
+  /** Section 28: assigns to the current active doctor, or leaves WAITING_FOR_DOCTOR + notifies admins. */
+  async assignToAvailableDoctor(escalationId: string) {
     const escalation = await this.findOne(escalationId);
-    const nurse = await this.attendance.getCurrentAvailableNurse();
+    const doctor = await this.attendance.getCurrentAvailableDoctor();
 
-    if (!nurse) {
+    if (!doctor) {
       const admins = await this.users.findByRole(Role.ADMIN);
-      await this.notifications.notifyAdminsNoNurseAvailable(admins, escalationId);
-      this.logger.warn(`No nurse available - escalation ${escalationId} left WAITING_FOR_NURSE`);
+      await this.notifications.notifyAdminsNoDoctorAvailable(admins, escalationId);
+      this.logger.warn(`No doctor available - escalation ${escalationId} left WAITING_FOR_DOCTOR`);
       return escalation;
     }
 
-    escalation.assignedNurseId = nurse.id;
+    escalation.assignedDoctorId = doctor.id;
     escalation.status = EscalationStatus.ASSIGNED;
     escalation.assignedAt = new Date();
     await this.repo.save(escalation);
 
-    const nurseUser = await this.users.findById(nurse.userId);
+    const doctorUser = await this.users.findById(doctor.userId);
     const patient = await this.patients.findOne(escalation.patientId);
-    if (!nurseUser) {
-      this.logger.error(`Nurse ${nurse.id} has no linked user account - cannot notify`);
+    if (!doctorUser) {
+      this.logger.error(`Doctor ${doctor.id} has no linked user account - cannot notify`);
       return this.findOne(escalationId);
     }
 
     await this.notifications.notifyEscalationAssigned({
-      nurseUser,
+      doctorUser,
       patientName: patient?.fullName || patient?.user?.fullName || 'a patient',
       priority: escalation.priority,
       escalationId: escalation.id,
@@ -115,16 +115,16 @@ export class EscalationsService {
 
     await this.audit.record(AuditEvent.ESCALATION_ASSIGNED, undefined, {
       escalationId,
-      nurseId: nurse.id,
+      doctorId: doctor.id,
     });
 
     return this.findOne(escalationId);
   }
 
-  async findAll(filter?: { status?: EscalationStatus; nurseId?: string; patientId?: string }) {
+  async findAll(filter?: { status?: EscalationStatus; doctorId?: string; patientId?: string }) {
     const where: any = {};
     if (filter?.status) where.status = filter.status;
-    if (filter?.nurseId) where.assignedNurseId = filter.nurseId;
+    if (filter?.doctorId) where.assignedDoctorId = filter.doctorId;
     if (filter?.patientId) where.patientId = filter.patientId;
     return this.repo.find({ where, order: { createdAt: 'DESC' } });
   }
@@ -138,7 +138,7 @@ export class EscalationsService {
   /** HTTP-shaped list (includes the patient's callable phone number and AI sources). */
   async findAllViews(filter?: {
     status?: EscalationStatus;
-    nurseId?: string;
+    doctorId?: string;
     patientId?: string;
   }): Promise<EscalationView[]> {
     const escalations = await this.findAll(filter);
@@ -152,17 +152,17 @@ export class EscalationsService {
   private async toView(escalation: Escalation): Promise<EscalationView> {
     const patient = await this.patients.findOne(escalation.patientId);
 
-    let nurseName: string | null = null;
-    if (escalation.assignedNurseId) {
-      const nurse = await this.nurses.findOne(escalation.assignedNurseId);
-      nurseName = nurse?.user?.fullName ?? null;
+    let doctorName: string | null = null;
+    if (escalation.assignedDoctorId) {
+      const doctor = await this.doctors.findOne(escalation.assignedDoctorId);
+      doctorName = doctor?.user?.fullName ?? null;
     }
 
-    return toEscalationView(escalation, patient, nurseName, await this.sourcesFor(escalation));
+    return toEscalationView(escalation, patient, doctorName, await this.sourcesFor(escalation));
   }
 
   /**
-   * Resolves which approved clinic chunks the AI actually used, so the nurse can see
+   * Resolves which approved clinic chunks the AI actually used, so the doctor can see
    * what the patient was told and where it came from (spec section 24/32).
    */
   private async sourcesFor(escalation: Escalation): Promise<EscalationSource[]> {
@@ -172,7 +172,7 @@ export class EscalationsService {
     // Stored citations are model output, so they can be malformed - rows written in
     // mock mode hold positional indices like "1". Passing one of those to a uuid
     // column throws QueryFailedError and took down the whole case list (a 500 on
-    // GET /escalations for every nurse), so filter to well-formed uuids first.
+    // GET /escalations for every doctor), so filter to well-formed uuids first.
     const chunkIds = (message?.sourceChunkIds ?? []).filter((id) => UUID_PATTERN.test(id));
     if (!chunkIds.length) return [];
 
@@ -195,21 +195,21 @@ export class EscalationsService {
       .filter((s): s is EscalationSource => s !== null);
   }
 
-  async markContacted(escalationId: string, nurseId: string) {
+  async markContacted(escalationId: string, doctorId: string) {
     const escalation = await this.findOne(escalationId);
     escalation.status = EscalationStatus.CONTACTED;
     escalation.contactedAt = escalation.contactedAt || new Date();
     await this.repo.save(escalation);
-    await this.audit.record(AuditEvent.NURSE_CONTACTED, undefined, { escalationId, nurseId });
+    await this.audit.record(AuditEvent.DOCTOR_CONTACTED, undefined, { escalationId, doctorId });
     return escalation;
   }
 
-  async resolve(escalationId: string, nurseId: string, dto: ResolveEscalationDto) {
+  async resolve(escalationId: string, doctorId: string, dto: ResolveEscalationDto) {
     const escalation = await this.findOne(escalationId);
 
     const note = this.notesRepo.create({
       escalationId,
-      nurseId,
+      doctorId,
       patientContacted: dto.patientContacted,
       contactTime: dto.patientContacted ? new Date() : undefined,
       issueCategory: dto.issueCategory,
@@ -229,17 +229,17 @@ export class EscalationsService {
     await this.audit.record(
       dto.escalateToDoctor ? AuditEvent.DOCTOR_ESCALATION : AuditEvent.CASE_RESOLVED,
       undefined,
-      { escalationId, nurseId },
+      { escalationId, doctorId },
     );
 
     return { escalation, note };
   }
 
-  async escalateToDoctor(escalationId: string, nurseId: string) {
+  async escalateToDoctor(escalationId: string, doctorId: string) {
     const escalation = await this.findOne(escalationId);
     escalation.status = EscalationStatus.ESCALATED_TO_DOCTOR;
     await this.repo.save(escalation);
-    await this.audit.record(AuditEvent.DOCTOR_ESCALATION, undefined, { escalationId, nurseId });
+    await this.audit.record(AuditEvent.DOCTOR_ESCALATION, undefined, { escalationId, doctorId });
     return escalation;
   }
 

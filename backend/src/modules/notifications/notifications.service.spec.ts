@@ -26,7 +26,7 @@ describe('NotificationsService - FCM failure handling', () => {
     const service = new NotificationsService(notifications as any, fcm as any);
 
     const result = await service.notifyEscalationAssigned({
-      nurseUser: { id: 'user-1', fcmToken: 'stale-token' } as any,
+      doctorUser: { id: 'user-1', fcmToken: 'stale-token' } as any,
       patientName: 'Rahul',
       priority: EscalationPriority.NORMAL,
       escalationId: 'esc-1',
@@ -42,7 +42,7 @@ describe('NotificationsService - FCM failure handling', () => {
     const service = new NotificationsService(notifications as any, fcm as any);
 
     const result = await service.notifyEscalationAssigned({
-      nurseUser: { id: 'user-1' } as any,
+      doctorUser: { id: 'user-1' } as any,
       patientName: 'Rahul',
       priority: EscalationPriority.URGENT,
       escalationId: 'esc-2',
@@ -64,7 +64,7 @@ describe('NotificationsService - FCM failure handling', () => {
     };
     const service = new NotificationsService(notifications as any, fcm as any);
 
-    await service.notifyAdminsNoNurseAvailable(
+    await service.notifyAdminsNoDoctorAvailable(
       [{ id: 'admin-1' } as any, { id: 'admin-2' } as any],
       'esc-3',
     );

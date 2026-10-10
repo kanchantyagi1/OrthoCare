@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { mockEmbed } from './mock-embedding.util';
-import { PATIENT_SUPPORT_SYSTEM_PROMPT, SAFE_ESCALATION_MESSAGE, AI_UNAVAILABLE_MESSAGE } from './system-prompt';
+import { PATIENT_SUPPORT_SYSTEM_PROMPT, SAFE_ESCALATION_MESSAGE, ASSISTANT_UNAVAILABLE_MESSAGE } from './system-prompt';
 import { AiConfidence, EscalationPriority } from '../../common/enums/escalation.enum';
 import { RetrievedChunk, StructuredAiAnswer } from './interfaces/ai-response.interface';
 
@@ -101,7 +101,7 @@ export class AiProviderService {
     } catch (err) {
       this.logger.error(`Chat completion failed: ${(err as Error).message}`);
       return {
-        answer: AI_UNAVAILABLE_MESSAGE,
+        answer: ASSISTANT_UNAVAILABLE_MESSAGE,
         confidence: AiConfidence.INSUFFICIENT_CONTEXT,
         needsHuman: true,
         priority: EscalationPriority.NORMAL,

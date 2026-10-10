@@ -16,7 +16,7 @@ export class NotificationsService {
   ) {}
 
   async notifyEscalationAssigned(params: {
-    nurseUser: User;
+    doctorUser: User;
     patientName: string;
     priority: EscalationPriority;
     escalationId: string;
@@ -28,7 +28,7 @@ export class NotificationsService {
       : `Patient: ${params.patientName}\nPriority: ${params.priority}\nPlease respond.`;
 
     const notification = this.notifications.create({
-      userId: params.nurseUser.id,
+      userId: params.doctorUser.id,
       title,
       body,
       data: { escalationId: params.escalationId, priority: params.priority },
@@ -38,7 +38,7 @@ export class NotificationsService {
     await this.notifications.save(notification);
 
     const result = await this.fcm.send({
-      deviceToken: params.nurseUser.fcmToken,
+      deviceToken: params.doctorUser.fcmToken,
       title,
       body,
       data: { escalationId: params.escalationId },
@@ -55,12 +55,12 @@ export class NotificationsService {
     return notification;
   }
 
-  async notifyAdminsNoNurseAvailable(adminUsers: User[], escalationId: string) {
+  async notifyAdminsNoDoctorAvailable(adminUsers: User[], escalationId: string) {
     for (const admin of adminUsers) {
       const notification = this.notifications.create({
         userId: admin.id,
-        title: 'No nurse currently available',
-        body: `Escalation ${escalationId} is waiting for a nurse to come online.`,
+        title: 'No doctor currently available',
+        body: `Escalation ${escalationId} is waiting for a doctor to come online.`,
         data: { escalationId },
         relatedEscalationId: escalationId,
         status: 'PENDING',

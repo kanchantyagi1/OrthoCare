@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Attendance } from '../attendance/entities/attendance.entity';
-import { Nurse } from '../nurses/entities/nurse.entity';
+import { Doctor } from '../doctors/entities/doctor.entity';
 import { Shift } from '../shifts/entities/shift.entity';
 import { Escalation } from '../escalations/entities/escalation.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
@@ -26,7 +26,7 @@ function avgMinutes(diffsMs: number[]): number | null {
 export class DashboardService {
   constructor(
     @InjectRepository(Attendance) private readonly attendanceRepo: Repository<Attendance>,
-    @InjectRepository(Nurse) private readonly nurseRepo: Repository<Nurse>,
+    @InjectRepository(Doctor) private readonly doctorRepo: Repository<Doctor>,
     @InjectRepository(Escalation) private readonly escalationRepo: Repository<Escalation>,
     @InjectRepository(ChatSession) private readonly sessionRepo: Repository<ChatSession>,
     @InjectRepository(ChatMessage) private readonly messageRepo: Repository<ChatMessage>,
@@ -34,16 +34,16 @@ export class DashboardService {
     private readonly config: ConfigService,
   ) {}
 
-  /// Nurse-scoped counterpart to overview(), backing the nurse home screen
-  /// (spec section 31): today's shift, punch state, and this nurse's own caseload.
-  async nurseOverview(nurseId: string) {
+  /// Doctor-scoped counterpart to overview(), backing the doctor home screen
+  /// (spec section 31): today's shift, punch state, and this doctor's own caseload.
+  async doctorOverview(doctorId: string) {
     const [shifts, openAttendance, escalations] = await Promise.all([
-      this.shiftRepo.find({ where: { nurseId, isActive: true } }),
+      this.shiftRepo.find({ where: { doctorId, isActive: true } }),
       this.attendanceRepo.findOne({
-        where: { nurseId, punchOut: IsNull() },
+        where: { doctorId, punchOut: IsNull() },
         order: { punchIn: 'DESC' },
       }),
-      this.escalationRepo.find({ where: { assignedNurseId: nurseId } }),
+      this.escalationRepo.find({ where: { assignedDoctorId: doctorId } }),
     ]);
 
     const nowHhMm = new Date().toTimeString().slice(0, 5);
@@ -78,13 +78,15 @@ export class DashboardService {
   async overview() {
     const since = startOfToday();
 
-    const activeNurses = await this.attendanceRepo.count({ where: { punchOut: null as any } });
+    // IsNull() is required here too - a bare null is dropped by TypeORM, which made this
+    // count every attendance row ever recorded instead of the currently open ones.
+    const activeDoctors = await this.attendanceRepo.count({ where: { punchOut: IsNull() } });
     const patientChatsToday = await this.sessionRepo
       .createQueryBuilder('s')
       .where('s.created_at >= :since', { since })
       .getCount();
 
-    const aiResolvedToday = await this.messageRepo
+    const resolvedByAssistantToday = await this.messageRepo
       .createQueryBuilder('m')
       .where('m.role = :role', { role: 'assistant' })
       .andWhere('m.needs_human = false')
@@ -97,32 +99,32 @@ export class DashboardService {
       .getCount();
 
     const pending = await this.escalationRepo.count({
-      where: [{ status: EscalationStatus.WAITING_FOR_NURSE }, { status: EscalationStatus.ASSIGNED }],
+      where: [{ status: EscalationStatus.WAITING_FOR_DOCTOR }, { status: EscalationStatus.ASSIGNED }],
     });
     const urgent = await this.escalationRepo.count({
       where: { priority: EscalationPriority.URGENT, status: EscalationStatus.ASSIGNED },
     });
 
     return {
-      activeNurses,
+      activeDoctors,
       // Field names match what the admin dashboard cards read.
       patientChats: patientChatsToday,
-      aiResolved: aiResolvedToday,
+      resolvedByAssistant: resolvedByAssistantToday,
       humanEscalations: escalationsToday,
       pending,
       urgent,
-      nursePerformance: await this.nursePerformance(),
+      doctorPerformance: await this.doctorPerformance(),
     };
   }
 
-  async nursePerformance() {
-    const nurses = await this.nurseRepo.find({ relations: ['user'] });
+  async doctorPerformance() {
+    const doctors = await this.doctorRepo.find({ relations: ['user'] });
     const slaMs =
-      this.config.get<number>('sla.nurseFirstResponseMinutes', 15) * 60_000;
+      this.config.get<number>('sla.doctorFirstResponseMinutes', 15) * 60_000;
 
     const results: {
-      nurseId: string;
-      nurseName: string;
+      doctorId: string;
+      doctorName: string;
       assigned: number;
       resolved: number;
       pending: number;
@@ -130,8 +132,8 @@ export class DashboardService {
       slaBreaches: number;
     }[] = [];
 
-    for (const nurse of nurses) {
-      const escalations = await this.escalationRepo.find({ where: { assignedNurseId: nurse.id } });
+    for (const doctor of doctors) {
+      const escalations = await this.escalationRepo.find({ where: { assignedDoctorId: doctor.id } });
       const resolved = escalations.filter((e) => e.status === EscalationStatus.RESOLVED);
       const pending = escalations.filter(
         (e) => e.status === EscalationStatus.ASSIGNED || e.status === EscalationStatus.CONTACTED,
@@ -150,8 +152,8 @@ export class DashboardService {
       }).length;
 
       results.push({
-        nurseId: nurse.id,
-        nurseName: nurse.user?.fullName || '',
+        doctorId: doctor.id,
+        doctorName: doctor.user?.fullName || '',
         assigned: escalations.length,
         resolved: resolved.length,
         pending: pending.length,
@@ -166,14 +168,14 @@ export class DashboardService {
     const since = startOfToday();
     const rows = await this.attendanceRepo
       .createQueryBuilder('a')
-      .leftJoinAndSelect('a.nurse', 'nurse')
-      .leftJoinAndSelect('nurse.user', 'user')
+      .leftJoinAndSelect('a.doctor', 'doctor')
+      .leftJoinAndSelect('doctor.user', 'user')
       .where('a.punch_in >= :since', { since })
       .orderBy('a.punch_in', 'DESC')
       .getMany();
 
     return rows.map((row) => ({
-      nurseName: row.nurse?.user?.fullName || '',
+      doctorName: row.doctor?.user?.fullName || '',
       punchIn: row.punchIn.toISOString(),
       punchOut: row.punchOut ? row.punchOut.toISOString() : null,
     }));
@@ -199,14 +201,14 @@ export class DashboardService {
     };
   }
 
-  async aiReport() {
+  async assistantReport() {
     const messages = await this.messageRepo.find({ where: { role: 'assistant' } });
     const supported = messages.filter((m) => m.confidence === 'supported').length;
     const insufficient = messages.filter((m) => m.confidence === 'insufficient_context').length;
     const escalated = messages.filter((m) => m.needsHuman).length;
 
     return {
-      totalAiResponses: messages.length,
+      totalResponses: messages.length,
       supported,
       insufficientContext: insufficient,
       escalatedToHuman: escalated,

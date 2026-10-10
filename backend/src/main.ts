@@ -25,10 +25,10 @@ async function bootstrap() {
   const port = config.get<number>('port') || 3000;
 
   await app.listen(port);
-  Logger.log(`OrthoCare AI backend listening on port ${port}`, 'Bootstrap');
+  Logger.log(`Prime Ortho backend listening on port ${port}`, 'Bootstrap');
 
   if (config.get('openai.mockMode')) {
-    Logger.warn('OPENAI running in MOCK MODE - set OPENAI_API_KEY for real GPT-4.1-mini/embeddings', 'Bootstrap');
+    Logger.warn('Clinic assistant running in MOCK MODE - set OPENAI_API_KEY for real answers/embeddings', 'Bootstrap');
   }
   if (config.get('fcm.mockMode')) {
     Logger.warn('FCM running in MOCK MODE - push notifications are logged only, not sent', 'Bootstrap');

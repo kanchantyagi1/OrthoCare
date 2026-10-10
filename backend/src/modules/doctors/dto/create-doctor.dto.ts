@@ -17,6 +17,10 @@ export class CreateDoctorDto {
 
   @IsOptional()
   @IsString()
+  employeeCode?: string;
+
+  @IsOptional()
+  @IsString()
   specialization?: string;
 
   @IsOptional()

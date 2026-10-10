@@ -1,15 +1,15 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { Nurse } from '../../nurses/entities/nurse.entity';
+import { Doctor } from '../../doctors/entities/doctor.entity';
 
 @Entity('shifts')
 export class Shift extends BaseEntity {
-  @ManyToOne(() => Nurse, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'nurse_id' })
-  nurse: Nurse;
+  @ManyToOne(() => Doctor, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'doctor_id' })
+  doctor: Doctor;
 
-  @Column({ name: 'nurse_id' })
-  nurseId: string;
+  @Column({ name: 'doctor_id' })
+  doctorId: string;
 
   @Column({ nullable: true })
   label?: string;

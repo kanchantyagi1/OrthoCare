@@ -4,7 +4,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { NursesService } from '../nurses/nurses.service';
+import { DoctorsService } from '../doctors/doctors.service';
 import { DashboardService } from './dashboard.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,7 +13,7 @@ import { DashboardService } from './dashboard.service';
 export class DashboardController {
   constructor(
     private readonly dashboard: DashboardService,
-    private readonly nurses: NursesService,
+    private readonly doctors: DoctorsService,
   ) {}
 
   @Get('dashboard')
@@ -23,11 +23,11 @@ export class DashboardController {
 
   // Method-level @Roles overrides the class-level ADMIN/DOCTOR restriction.
   // Declared before 'dashboard' has no bearing here since paths differ exactly.
-  @Roles(Role.NURSE)
-  @Get('dashboard/nurse')
-  async nurseOverview(@CurrentUser() user: { id: string }) {
-    const nurse = await this.nurses.findByUserIdOrThrow(user.id);
-    return this.dashboard.nurseOverview(nurse.id);
+  @Roles(Role.DOCTOR)
+  @Get('dashboard/doctor')
+  async doctorOverview(@CurrentUser() user: { id: string }) {
+    const doctor = await this.doctors.findByUserIdOrThrow(user.id);
+    return this.dashboard.doctorOverview(doctor.id);
   }
 
   @Get('reports/attendance')
@@ -40,8 +40,8 @@ export class DashboardController {
     return this.dashboard.escalationsReport();
   }
 
-  @Get('reports/ai')
-  ai() {
-    return this.dashboard.aiReport();
+  @Get('reports/assistant')
+  assistantReport() {
+    return this.dashboard.assistantReport();
   }
 }

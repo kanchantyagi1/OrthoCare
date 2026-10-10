@@ -24,7 +24,7 @@ describe('AiProviderService (mock mode - medical safety)', () => {
 
     expect(result.confidence).toBe(AiConfidence.INSUFFICIENT_CONTEXT);
     expect(result.needsHuman).toBe(true);
-    expect(result.answer).toMatch(/connect your concern with the clinic team/i);
+    expect(result.answer).toMatch(/pass your concern to the clinic team/i);
   });
 
   it('drops model-supplied citations that are not ids of the chunks it was given', () => {

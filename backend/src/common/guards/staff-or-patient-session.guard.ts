@@ -17,7 +17,7 @@ import { Role } from '../enums/role.enum';
  */
 @Injectable()
 export class StaffOrPatientSessionGuard extends AuthGuard('jwt') {
-  private static readonly STAFF_ROLES: Role[] = [Role.NURSE, Role.ADMIN, Role.DOCTOR];
+  private static readonly STAFF_ROLES: Role[] = [Role.ADMIN, Role.DOCTOR];
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();

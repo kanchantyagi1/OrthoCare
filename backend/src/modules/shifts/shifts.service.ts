@@ -14,14 +14,14 @@ export class ShiftsService {
     return this.repo.find({ order: { startTime: 'ASC' } });
   }
 
-  /** Flat rows including the nurse's name; times stay as "HH:mm" strings. */
+  /** Flat rows including the doctor's name; times stay as "HH:mm" strings. */
   async listForApi(): Promise<ShiftListItem[]> {
-    const shifts = await this.repo.find({ relations: ['nurse', 'nurse.user'], order: { startTime: 'ASC' } });
+    const shifts = await this.repo.find({ relations: ['doctor', 'doctor.user'], order: { startTime: 'ASC' } });
     return shifts.map(toShiftListItem);
   }
 
-  findForNurse(nurseId: string) {
-    return this.repo.find({ where: { nurseId }, order: { startTime: 'ASC' } });
+  findForDoctor(doctorId: string) {
+    return this.repo.find({ where: { doctorId }, order: { startTime: 'ASC' } });
   }
 
   async findOne(id: string) {

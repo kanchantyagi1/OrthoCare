@@ -1,10 +1,10 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Escalation } from './escalation.entity';
-import { Nurse } from '../../nurses/entities/nurse.entity';
+import { Doctor } from '../../doctors/entities/doctor.entity';
 
-@Entity('nurse_case_notes')
-export class NurseCaseNote extends BaseEntity {
+@Entity('doctor_case_notes')
+export class DoctorCaseNote extends BaseEntity {
   @ManyToOne(() => Escalation, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'escalation_id' })
   escalation: Escalation;
@@ -12,12 +12,12 @@ export class NurseCaseNote extends BaseEntity {
   @Column({ name: 'escalation_id' })
   escalationId: string;
 
-  @ManyToOne(() => Nurse, { onDelete: 'SET NULL', nullable: true })
-  @JoinColumn({ name: 'nurse_id' })
-  nurse?: Nurse;
+  @ManyToOne(() => Doctor, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'doctor_id' })
+  doctor?: Doctor;
 
-  @Column({ name: 'nurse_id', nullable: true })
-  nurseId?: string;
+  @Column({ name: 'doctor_id', nullable: true })
+  doctorId?: string;
 
   @Column({ name: 'patient_contacted', default: false })
   patientContacted: boolean;

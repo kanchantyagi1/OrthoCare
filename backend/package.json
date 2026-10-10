@@ -1,7 +1,7 @@
 {
-  "name": "orthocare-backend",
+  "name": "prime-ortho-backend",
   "version": "0.1.0",
-  "description": "OrthoCare AI backend - NestJS API, RAG pipeline, nurse attendance",
+  "description": "Prime Ortho backend - NestJS API, clinic knowledge retrieval, doctor attendance",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -20,7 +20,8 @@
     "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
     "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
-    "seed:demo": "ts-node -r tsconfig-paths/register src/seed/seed.ts"
+    "seed:demo": "ts-node -r tsconfig-paths/register src/seed/seed.ts",
+    "reset:clinic": "ts-node -r tsconfig-paths/register src/seed/reset-clinic.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

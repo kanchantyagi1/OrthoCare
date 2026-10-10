@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
-import { Nurse } from '../nurses/entities/nurse.entity';
+import { Doctor } from '../doctors/entities/doctor.entity';
 import { Shift } from '../shifts/entities/shift.entity';
 import { PunchInDto } from './dto/punch-in.dto';
 import { PunchOutDto } from './dto/punch-out.dto';
@@ -13,43 +13,55 @@ import { AuditEvent } from '../../common/enums/audit-event.enum';
 export class AttendanceService {
   constructor(
     @InjectRepository(Attendance) private readonly attendanceRepo: Repository<Attendance>,
-    @InjectRepository(Nurse) private readonly nurseRepo: Repository<Nurse>,
+    @InjectRepository(Doctor) private readonly doctorRepo: Repository<Doctor>,
     @InjectRepository(Shift) private readonly shiftRepo: Repository<Shift>,
     private readonly audit: AuditService,
   ) {}
 
-  private async findOpenAttendance(nurseId: string) {
-    return this.attendanceRepo.findOne({ where: { nurseId, punchOut: null as any } });
+  /**
+   * The open (not yet punched-out) attendance row, or null.
+   *
+   * MUST use IsNull(): a bare `punchOut: null` is not translated to `IS NULL` by
+   * TypeORM, the condition is dropped, and this matched ANY attendance row for the
+   * doctor. That made punch-in believe you were always already punched in - so after
+   * a punch-out you could never punch in again - and made today() report ACTIVE with
+   * zero records for the day.
+   */
+  private async findOpenAttendance(doctorId: string) {
+    return this.attendanceRepo.findOne({
+      where: { doctorId, punchOut: IsNull() },
+      order: { punchIn: 'DESC' },
+    });
   }
 
-  async punchIn(nurseId: string, dto: PunchInDto, actorUserId?: string) {
-    const existing = await this.findOpenAttendance(nurseId);
+  async punchIn(doctorId: string, dto: PunchInDto, actorUserId?: string) {
+    const existing = await this.findOpenAttendance(doctorId);
     if (existing) {
-      // Idempotent: nurse is already punched in, do not create a duplicate.
+      // Idempotent: doctor is already punched in, do not create a duplicate.
       return { attendance: existing, duplicate: true };
     }
 
     if (dto.shiftId) {
-      const shift = await this.shiftRepo.findOne({ where: { id: dto.shiftId, nurseId } });
-      if (!shift) throw new BadRequestException('Shift does not belong to this nurse');
+      const shift = await this.shiftRepo.findOne({ where: { id: dto.shiftId, doctorId } });
+      if (!shift) throw new BadRequestException('Shift does not belong to this doctor');
     }
 
     const attendance = this.attendanceRepo.create({
-      nurseId,
+      doctorId,
       shiftId: dto.shiftId,
       punchIn: new Date(),
       deviceId: dto.deviceId,
     });
     const saved = await this.attendanceRepo.save(attendance);
-    await this.audit.record(AuditEvent.PUNCH_IN, actorUserId, { nurseId, attendanceId: saved.id });
+    await this.audit.record(AuditEvent.PUNCH_IN, actorUserId, { doctorId, attendanceId: saved.id });
     return { attendance: saved, duplicate: false };
   }
 
-  async punchOut(nurseId: string, dto: PunchOutDto, actorUserId?: string) {
-    const existing = await this.findOpenAttendance(nurseId);
+  async punchOut(doctorId: string, dto: PunchOutDto, actorUserId?: string) {
+    const existing = await this.findOpenAttendance(doctorId);
     if (!existing) {
       const last = await this.attendanceRepo.findOne({
-        where: { nurseId },
+        where: { doctorId },
         order: { punchIn: 'DESC' },
       });
       // Idempotent: nothing open to punch out of.
@@ -59,18 +71,18 @@ export class AttendanceService {
     existing.punchOut = new Date();
     if (dto.deviceId) existing.deviceId = dto.deviceId;
     const saved = await this.attendanceRepo.save(existing);
-    await this.audit.record(AuditEvent.PUNCH_OUT, actorUserId, { nurseId, attendanceId: saved.id });
+    await this.audit.record(AuditEvent.PUNCH_OUT, actorUserId, { doctorId, attendanceId: saved.id });
     return { attendance: saved, duplicate: false };
   }
 
-  async today(nurseId: string) {
+  async today(doctorId: string) {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    const open = await this.findOpenAttendance(nurseId);
+    const open = await this.findOpenAttendance(doctorId);
     const records = await this.attendanceRepo
       .createQueryBuilder('a')
-      .where('a.nurse_id = :nurseId', { nurseId })
+      .where('a.doctor_id = :doctorId', { doctorId })
       .andWhere('a.punch_in >= :startOfDay', { startOfDay })
       .orderBy('a.punch_in', 'DESC')
       .getMany();
@@ -79,16 +91,16 @@ export class AttendanceService {
   }
 
   /**
-   * Section 28: finds a nurse who (1) has an assigned shift, (2) that shift is currently
+   * Section 28: finds a doctor who (1) has an assigned shift, (2) that shift is currently
    * active (now falls within its start/end time-of-day window), (3) has punched in,
-   * (4) has not punched out, and (5) is active. Returns null (WAITING_FOR_NURSE) if none.
+   * (4) has not punched out, and (5) is active. Returns null (WAITING_FOR_DOCTOR) if none.
    */
-  async getCurrentAvailableNurse(): Promise<Nurse | null> {
+  async getCurrentAvailableDoctor(): Promise<Doctor | null> {
     const nowMinutes = this.currentMinutesOfDay();
 
     const openAttendance = await this.attendanceRepo
       .createQueryBuilder('a')
-      .innerJoin(Nurse, 'n', 'n.id = a.nurse_id')
+      .innerJoin(Doctor, 'n', 'n.id = a.doctor_id')
       .where('a.punch_out IS NULL')
       .andWhere('n.is_active = true')
       .orderBy('a.punch_in', 'ASC')
@@ -96,13 +108,13 @@ export class AttendanceService {
 
     for (const attendance of openAttendance) {
       const shifts = await this.shiftRepo.find({
-        where: { nurseId: attendance.nurseId, isActive: true },
+        where: { doctorId: attendance.doctorId, isActive: true },
       });
       const hasActiveShiftNow = shifts.some((shift) =>
         this.isWithinShiftWindow(nowMinutes, shift.startTime, shift.endTime),
       );
       if (hasActiveShiftNow) {
-        return this.nurseRepo.findOne({ where: { id: attendance.nurseId } });
+        return this.doctorRepo.findOne({ where: { id: attendance.doctorId } });
       }
     }
 

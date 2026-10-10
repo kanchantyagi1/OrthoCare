@@ -41,5 +41,5 @@ export class ChatMessage extends BaseEntity {
   model?: string;
 
   @Column({ name: 'helpful', nullable: true })
-  helpful?: boolean; // patient feedback: true = "Yes, this helped", false = "No, talk to nurse"
+  helpful?: boolean; // patient feedback: true = "Yes, this helped", false = "No, talk to doctor"
 }

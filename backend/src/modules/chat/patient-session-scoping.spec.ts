@@ -170,7 +170,7 @@ describe('account-less patient session scoping (escalations)', () => {
       patientId: 'patient-a',
       question: 'A question',
       priority: 'normal',
-      status: 'WAITING_FOR_NURSE',
+      status: 'WAITING_FOR_DOCTOR',
       createdAt: new Date(),
     },
     {
@@ -178,7 +178,7 @@ describe('account-less patient session scoping (escalations)', () => {
       patientId: 'patient-b',
       question: 'B question',
       priority: 'normal',
-      status: 'WAITING_FOR_NURSE',
+      status: 'WAITING_FOR_DOCTOR',
       createdAt: new Date(),
     },
   ];
@@ -204,7 +204,7 @@ describe('account-less patient session scoping (escalations)', () => {
 
     expect(views.map((v) => v.id)).toEqual(['esc-a']);
     expect(views.map((v) => v.id)).not.toContain('esc-b');
-    // The nurse-facing payload must carry a callable number for the right patient.
+    // The doctor-facing payload must carry a callable number for the right patient.
     expect(views[0].patientPhone).toBe('9000000001');
     expect(views[0].patientName).toBe('Patient A');
   });

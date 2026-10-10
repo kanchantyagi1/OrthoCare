@@ -7,7 +7,6 @@ import configuration from './config/configuration';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { DoctorsModule } from './modules/doctors/doctors.module';
-import { NursesModule } from './modules/nurses/nurses.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
@@ -45,7 +44,6 @@ import { HealthController } from './health.controller';
     AuthModule,
     UsersModule,
     DoctorsModule,
-    NursesModule,
     PatientsModule,
     ShiftsModule,
     AttendanceModule,
