@@ -7,7 +7,7 @@ import '../../../models/escalation.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../../../widgets/priority_chip.dart';
 import '../../../widgets/status_badge.dart';
-import '../nurse_controller.dart';
+import '../doctor_controller.dart';
 import 'resolution_form_sheet.dart';
 
 class EscalationDetailScreen extends ConsumerWidget {
@@ -77,7 +77,7 @@ class _EscalationDetailBody extends ConsumerWidget {
         const SizedBox(height: 12),
         _SectionCard(title: 'Patient question', child: Text(escalation.question)),
         const SizedBox(height: 12),
-        _SectionCard(title: 'AI response', child: Text(escalation.aiResponse)),
+        _SectionCard(title: 'Assistant response', child: Text(escalation.aiResponse)),
         if (escalation.reason != null) ...[
           const SizedBox(height: 12),
           _SectionCard(title: 'Escalation reason', child: Text(escalation.reason!)),
@@ -131,7 +131,7 @@ class _EscalationDetailBody extends ConsumerWidget {
                     resolutionNotes: result.resolutionNotes,
                     followUpRequired: result.followUpRequired,
                     escalateToDoctor: result.escalateToDoctor,
-                    nurseNotes: result.nurseNotes,
+                    doctorNotes: result.doctorNotes,
                   );
                   await refresh();
                 },
@@ -145,7 +145,7 @@ class _EscalationDetailBody extends ConsumerWidget {
                   await refresh();
                 },
                 icon: const Icon(Icons.local_hospital_outlined),
-                label: const Text('Escalate to Doctor'),
+                label: const Text('Escalate to Senior'),
               ),
           ],
         ),

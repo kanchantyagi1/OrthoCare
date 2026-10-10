@@ -92,18 +92,18 @@ class ChatController extends StateNotifier<ChatState> {
         'message': text.trim(),
       });
       // The reply is `{patientMessage, assistantMessage, duplicate}` - reading
-      // the envelope for an `answer` key yielded a blank AI bubble.
+      // the envelope for an `answer` key yielded a blank assistant bubble.
       final assistant = response['assistantMessage'] as Map<String, dynamic>?;
-      final aiMessage = assistant != null
+      final assistantReply = assistant != null
           ? ChatMessage.fromJson(assistant)
           : ChatMessage(
               id: 'ai-${DateTime.now().microsecondsSinceEpoch}',
-              sender: MessageSender.ai,
+              sender: MessageSender.assistant,
               text: response['answer'] as String? ?? '',
               createdAt: DateTime.now(),
               needsHumanFollowUp: response['needsHuman'] as bool? ?? false,
             );
-      state = state.copyWith(messages: [...state.messages, aiMessage], sending: false);
+      state = state.copyWith(messages: [...state.messages, assistantReply], sending: false);
     } catch (e) {
       state = state.copyWith(sending: false, error: e.toString());
     }
@@ -115,15 +115,15 @@ class ChatController extends StateNotifier<ChatState> {
     );
   }
 
-  /// Patient tapped "No, talk to nurse" — create (or confirm) a human
-  /// escalation for this AI answer.
-  Future<String?> requestNurse(ChatMessage aiMessage) async {
-    setHelpful(aiMessage.id, false);
-    if (aiMessage.escalationId != null) return aiMessage.escalationId;
+  /// Patient tapped "No, talk to a doctor" — create (or confirm) a human
+  /// escalation for this assistant answer.
+  Future<String?> requestDoctor(ChatMessage assistantMessage) async {
+    setHelpful(assistantMessage.id, false);
+    if (assistantMessage.escalationId != null) return assistantMessage.escalationId;
 
-    // `question` is required by the API, so send the patient turn this AI answer
-    // was replying to - that is what the nurse reads on the case screen.
-    final index = state.messages.indexWhere((m) => m.id == aiMessage.id);
+    // `question` is required by the API, so send the patient turn this assistant answer
+    // was replying to - that is what the doctor reads on the case screen.
+    final index = state.messages.indexWhere((m) => m.id == assistantMessage.id);
     String question = '';
     for (var i = (index == -1 ? state.messages.length : index) - 1; i >= 0; i--) {
       if (state.messages[i].sender == MessageSender.patient) {
@@ -135,11 +135,11 @@ class ChatController extends StateNotifier<ChatState> {
     final api = _ref.read(apiClientProvider);
     final data = await api.post('/escalations', data: {
       // The session identifies the (account-less) patient and carries the phone
-      // number the nurse will call back on.
+      // number the doctor will call back on.
       'sessionId': state.sessionId,
-      'chatMessageId': aiMessage.id,
-      'question': question.isEmpty ? 'Patient requested to speak to a nurse' : question,
-      'aiResponse': aiMessage.text,
+      'chatMessageId': assistantMessage.id,
+      'question': question.isEmpty ? 'Patient requested to speak to a doctor' : question,
+      'aiResponse': assistantMessage.text,
       'reason': 'patient_not_satisfied',
     });
     return data['id'] as String?;

@@ -3,7 +3,7 @@
 /// across dev/staging/prod without code changes.
 ///
 /// Example:
-///   flutter run --dart-define=API_BASE_URL=https://api.orthocare.example.com
+///   flutter run --dart-define=API_BASE_URL=https://api.primeortho.example.com
 class AppConfig {
   AppConfig._();
 

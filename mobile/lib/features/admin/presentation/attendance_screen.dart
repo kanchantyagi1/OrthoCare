@@ -26,13 +26,13 @@ class AttendanceScreen extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columns: const [
-                  DataColumn(label: Text('Nurse')),
+                  DataColumn(label: Text('Doctor')),
                   DataColumn(label: Text('Punch In')),
                   DataColumn(label: Text('Punch Out')),
                 ],
                 rows: items
                     .map((r) => DataRow(cells: [
-                          DataCell(Text(r.nurseName)),
+                          DataCell(Text(r.doctorName)),
                           DataCell(Text(DateFormat.yMMMd().add_jm().format(r.punchIn))),
                           DataCell(Text(r.punchOut != null ? DateFormat.yMMMd().add_jm().format(r.punchOut!) : '—')),
                         ]))

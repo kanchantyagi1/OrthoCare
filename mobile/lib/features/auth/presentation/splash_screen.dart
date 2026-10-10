@@ -23,10 +23,10 @@ class SplashScreen extends ConsumerWidget {
           children: [
             Icon(Icons.health_and_safety_rounded, size: 64, color: scheme.primary),
             const SizedBox(height: 16),
-            Text('OrthoCare AI', style: Theme.of(context).textTheme.headlineSmall),
+            Text('Prime Ortho', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 4),
             Text(
-              'AI Support. Human Care. Better Recovery.',
+              'Expert Care. Faster Recovery.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.outline),
             ),
             const SizedBox(height: 32),

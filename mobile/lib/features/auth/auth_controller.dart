@@ -76,6 +76,19 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  /// Moves a doctor or admin off the temporary password. The server verifies
+  /// [currentPassword] against the stored hash, so this is also the path for
+  /// a normal password change. The session stays valid afterwards.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _ref.read(apiClientProvider).post('/auth/change-password', data: {
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+    });
+  }
+
   Future<void> logout() async {
     try {
       await _ref.read(apiClientProvider).post('/auth/logout');

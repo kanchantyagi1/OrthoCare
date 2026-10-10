@@ -1,3 +1,5 @@
+import '../core/util/date_time_x.dart';
+
 enum EscalationPriority { normal, high, urgent }
 
 EscalationPriority priorityFromString(String? value) {
@@ -11,12 +13,14 @@ EscalationPriority priorityFromString(String? value) {
   }
 }
 
-enum EscalationStatus { waitingForNurse, assigned, contacted, resolved, escalatedToDoctor }
+enum EscalationStatus { waitingForDoctor, assigned, contacted, resolved, escalatedToDoctor }
 
 EscalationStatus escalationStatusFromString(String value) {
   switch (value.toUpperCase()) {
+    case 'WAITING_FOR_DOCTOR':
+    // Tolerated so a stale value from an older backend can't break parsing.
     case 'WAITING_FOR_NURSE':
-      return EscalationStatus.waitingForNurse;
+      return EscalationStatus.waitingForDoctor;
     case 'ASSIGNED':
       return EscalationStatus.assigned;
     case 'CONTACTED':
@@ -26,7 +30,7 @@ EscalationStatus escalationStatusFromString(String value) {
     case 'ESCALATED_TO_DOCTOR':
       return EscalationStatus.escalatedToDoctor;
     default:
-      return EscalationStatus.waitingForNurse;
+      return EscalationStatus.waitingForDoctor;
   }
 }
 
@@ -67,8 +71,8 @@ class Escalation {
   final String? reason;
   final EscalationPriority priority;
   final EscalationStatus status;
-  final String? assignedNurseId;
-  final String? assignedNurseName;
+  final String? assignedDoctorId;
+  final String? assignedDoctorName;
   final List<SourceDocument> sources;
   final DateTime createdAt;
   final DateTime? assignedAt;
@@ -88,8 +92,8 @@ class Escalation {
     this.reason,
     required this.priority,
     required this.status,
-    this.assignedNurseId,
-    this.assignedNurseName,
+    this.assignedDoctorId,
+    this.assignedDoctorName,
     this.sources = const [],
     required this.createdAt,
     this.assignedAt,
@@ -109,15 +113,15 @@ class Escalation {
         aiResponse: json['aiResponse'] as String? ?? '',
         reason: json['reason'] as String?,
         priority: priorityFromString(json['priority'] as String?),
-        status: escalationStatusFromString(json['status'] as String? ?? 'WAITING_FOR_NURSE'),
-        assignedNurseId: json['assignedNurseId'] as String?,
-        assignedNurseName: json['assignedNurseName'] as String?,
+        status: escalationStatusFromString(json['status'] as String? ?? 'WAITING_FOR_DOCTOR'),
+        assignedDoctorId: json['assignedDoctorId'] as String?,
+        assignedDoctorName: json['assignedDoctorName'] as String?,
         sources: (json['sources'] as List<dynamic>? ?? [])
             .map((e) => SourceDocument.fromJson(e as Map<String, dynamic>))
             .toList(),
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        assignedAt: json['assignedAt'] != null ? DateTime.parse(json['assignedAt'] as String) : null,
-        contactedAt: json['contactedAt'] != null ? DateTime.parse(json['contactedAt'] as String) : null,
-        resolvedAt: json['resolvedAt'] != null ? DateTime.parse(json['resolvedAt'] as String) : null,
+        createdAt: parseApiDateTimeOr(json['createdAt']),
+        assignedAt: parseApiDateTime(json['assignedAt']),
+        contactedAt: parseApiDateTime(json['contactedAt']),
+        resolvedAt: parseApiDateTime(json['resolvedAt']),
       );
 }

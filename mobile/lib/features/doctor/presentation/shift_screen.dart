@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../widgets/loading_overlay.dart';
-import '../nurse_controller.dart';
+import '../doctor_controller.dart';
 
 class ShiftScreen extends ConsumerWidget {
   const ShiftScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dashboard = ref.watch(nurseDashboardProvider);
+    final dashboard = ref.watch(doctorDashboardProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('My Shift')),
       body: dashboard.when(
         loading: () => const LoadingOverlay(),
-        error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(nurseDashboardProvider)),
+        error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(doctorDashboardProvider)),
         data: (data) {
           final shift = data.todayShift;
           if (shift == null) {

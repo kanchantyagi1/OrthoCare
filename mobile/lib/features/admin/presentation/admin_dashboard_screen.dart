@@ -36,37 +36,37 @@ class AdminDashboardScreen extends ConsumerWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.6,
                 children: [
-                  _StatCard(label: 'Active Nurses', value: s.activeNurses),
+                  _StatCard(label: 'Active Doctors', value: s.activeDoctors),
                   _StatCard(label: 'Patient Chats', value: s.patientChats),
-                  _StatCard(label: 'AI Resolved', value: s.aiResolved),
+                  _StatCard(label: 'Resolved Instantly', value: s.resolvedByAssistant),
                   _StatCard(label: 'Human Escalations', value: s.humanEscalations),
                   _StatCard(label: 'Pending', value: s.pending),
                   _StatCard(label: 'Urgent', value: s.urgent, highlight: true),
                 ],
               ),
               const SizedBox(height: 24),
-              Text('Nurse Performance', style: Theme.of(context).textTheme.titleMedium),
+              Text('Doctor Performance', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Card(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     columns: const [
-                      DataColumn(label: Text('Nurse')),
+                      DataColumn(label: Text('Doctor')),
                       DataColumn(label: Text('Assigned')),
                       DataColumn(label: Text('Resolved')),
                       DataColumn(label: Text('Pending')),
                       DataColumn(label: Text('Avg Response')),
                       DataColumn(label: Text('SLA Breaches')),
                     ],
-                    rows: s.nursePerformance
-                        .map((n) => DataRow(cells: [
-                              DataCell(Text(n.nurseName)),
-                              DataCell(Text('${n.assigned}')),
-                              DataCell(Text('${n.resolved}')),
-                              DataCell(Text('${n.pending}')),
-                              DataCell(Text('${n.averageResponseMinutes.toStringAsFixed(0)} min')),
-                              DataCell(Text('${n.slaBreaches}')),
+                    rows: s.doctorPerformance
+                        .map((d) => DataRow(cells: [
+                              DataCell(Text(d.doctorName)),
+                              DataCell(Text('${d.assigned}')),
+                              DataCell(Text('${d.resolved}')),
+                              DataCell(Text('${d.pending}')),
+                              DataCell(Text('${d.averageResponseMinutes.toStringAsFixed(0)} min')),
+                              DataCell(Text('${d.slaBreaches}')),
                             ]))
                         .toList(),
                   ),
@@ -126,10 +126,10 @@ class _AdminDrawer extends StatelessWidget {
           children: [
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text('OrthoCare AI — Admin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              child: Text('Prime Ortho — Admin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ),
             item(Icons.dashboard_outlined, 'Dashboard', '/admin/dashboard'),
-            item(Icons.people_outline, 'Nurse Management', '/admin/nurses'),
+            item(Icons.people_outline, 'Doctor Management', '/admin/doctors'),
             item(Icons.schedule_outlined, 'Shift Management', '/admin/shifts'),
             item(Icons.fingerprint, 'Attendance', '/admin/attendance'),
             item(Icons.support_agent_outlined, 'Escalations', '/admin/escalations'),

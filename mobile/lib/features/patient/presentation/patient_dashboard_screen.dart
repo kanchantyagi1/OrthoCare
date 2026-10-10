@@ -12,7 +12,7 @@ class PatientDashboardScreen extends ConsumerWidget {
     final session = ref.watch(patientSessionProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OrthoCare AI'),
+        title: const Text('Prime Ortho'),
         actions: [
           // Patients have no account to log out of; this just forgets the
           // phone number and chat session on this device.
@@ -37,14 +37,14 @@ class PatientDashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'AI Support. Human Care. Better Recovery.',
+              'Expert Care. Faster Recovery.',
               style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
             const SizedBox(height: 28),
             _DashboardTile(
               icon: Icons.chat_bubble_outline,
               title: 'Ask a question',
-              subtitle: 'Chat with the OrthoCare assistant',
+              subtitle: 'Get answers from your clinic',
               onTap: () => context.push('/patient/chat'),
             ),
             const SizedBox(height: 12),
@@ -57,7 +57,7 @@ class PatientDashboardScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             _DashboardTile(
               icon: Icons.support_agent_outlined,
-              title: 'My requests to nurse',
+              title: 'My requests to a doctor',
               subtitle: 'Track status of escalated questions',
               onTap: () => context.push('/patient/escalations'),
             ),

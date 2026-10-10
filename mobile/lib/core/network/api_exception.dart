@@ -13,7 +13,7 @@ class ApiException implements Exception {
 
   factory ApiException.network() => const ApiException(
         message:
-            'We couldn\'t reach the OrthoCare server. Please check your connection and try again.',
+            'We couldn\'t reach the Prime Ortho server. Please check your connection and try again.',
         isNetworkError: true,
       );
 

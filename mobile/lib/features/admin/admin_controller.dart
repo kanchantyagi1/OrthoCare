@@ -5,7 +5,7 @@ import '../../core/network/api_client.dart';
 import '../../models/dashboard_stats.dart';
 import '../../models/document.dart';
 import '../../models/escalation.dart';
-import '../../models/nurse_summary.dart';
+import '../../models/doctor_summary.dart';
 import '../../models/shift.dart';
 import '../auth/auth_controller.dart';
 
@@ -15,11 +15,11 @@ final adminDashboardProvider = FutureProvider.autoDispose<AdminDashboardStats>((
   return AdminDashboardStats.fromJson(data);
 });
 
-final nursesProvider = FutureProvider.autoDispose<List<NurseSummary>>((ref) async {
+final doctorsProvider = FutureProvider.autoDispose<List<DoctorSummary>>((ref) async {
   final api = ref.watch(apiClientProvider);
-  final data = await api.get('/nurses');
+  final data = await api.get('/doctors');
   final items = data['items'] as List<dynamic>? ?? (data['data'] as List<dynamic>? ?? []);
-  return items.map((e) => NurseSummary.fromJson(e as Map<String, dynamic>)).toList();
+  return items.map((e) => DoctorSummary.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 final shiftsProvider = FutureProvider.autoDispose<List<Shift>>((ref) async {
@@ -60,33 +60,33 @@ class AdminActions {
   // Field names below must match the backend DTOs exactly: NestJS runs its
   // ValidationPipe with forbidNonWhitelisted, so an unexpected key is rejected
   // outright with "property <name> should not exist".
-  Future<void> createNurse({
+  Future<void> createDoctor({
     required String email,
     required String fullName,
     required String phone,
     required String password,
   }) =>
-      _api.post('/nurses', data: {
+      _api.post('/doctors', data: {
         'email': email,
         'fullName': fullName,
         'phone': phone,
         'password': password,
       });
 
-  Future<void> updateNurse(String id, {required String fullName, required String phone, required bool isActive}) =>
-      _api.put('/nurses/$id', data: {'fullName': fullName, 'phone': phone, 'isActive': isActive});
+  Future<void> updateDoctor(String id, {required String fullName, required String phone, required bool isActive}) =>
+      _api.put('/doctors/$id', data: {'fullName': fullName, 'phone': phone, 'isActive': isActive});
 
-  Future<void> deleteNurse(String id) => _api.delete('/nurses/$id');
+  Future<void> deleteDoctor(String id) => _api.delete('/doctors/$id');
 
   // Shifts are daily "HH:mm" windows, not datetimes - see models/shift.dart.
   Future<void> createShift({
-    required String nurseId,
+    required String doctorId,
     required TimeOfDay start,
     required TimeOfDay end,
     String? label,
   }) =>
       _api.post('/shifts', data: {
-        'nurseId': nurseId,
+        'doctorId': doctorId,
         if (label != null && label.isNotEmpty) 'label': label,
         'startTime': Shift.toHhMm(start.hour, start.minute),
         'endTime': Shift.toHhMm(end.hour, end.minute),

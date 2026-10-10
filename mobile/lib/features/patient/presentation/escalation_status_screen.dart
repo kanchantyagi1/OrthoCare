@@ -14,7 +14,7 @@ class EscalationStatusScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final escalations = ref.watch(patientEscalationsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('My Requests to Nurse')),
+      appBar: AppBar(title: const Text('My Requests to a Doctor')),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(patientEscalationsProvider),
         child: escalations.when(
@@ -48,7 +48,7 @@ class EscalationStatusScreen extends ConsumerWidget {
                         ),
                         if (e.status == EscalationStatus.resolved) ...[
                           const SizedBox(height: 8),
-                          const Text('A nurse has reviewed and resolved this request.'),
+                          const Text('A doctor has reviewed and resolved this request.'),
                         ] else ...[
                           const SizedBox(height: 8),
                           const Text('The clinic team will contact you shortly.'),

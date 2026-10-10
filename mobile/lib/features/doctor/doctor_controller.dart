@@ -4,7 +4,7 @@ import '../../models/escalation.dart';
 import '../../models/shift.dart';
 import '../auth/auth_controller.dart';
 
-class NurseDashboardData {
+class DoctorDashboardData {
   final Shift? todayShift;
   final AttendanceRecord? attendance;
   final int newCases;
@@ -12,7 +12,7 @@ class NurseDashboardData {
   final int resolved;
   final double averageResponseMinutes;
 
-  const NurseDashboardData({
+  const DoctorDashboardData({
     this.todayShift,
     this.attendance,
     required this.newCases,
@@ -21,7 +21,7 @@ class NurseDashboardData {
     required this.averageResponseMinutes,
   });
 
-  factory NurseDashboardData.fromJson(Map<String, dynamic> json) => NurseDashboardData(
+  factory DoctorDashboardData.fromJson(Map<String, dynamic> json) => DoctorDashboardData(
         todayShift: json['todayShift'] != null ? Shift.fromJson(json['todayShift'] as Map<String, dynamic>) : null,
         attendance: json['attendance'] != null
             ? AttendanceRecord.fromJson(json['attendance'] as Map<String, dynamic>)
@@ -33,13 +33,13 @@ class NurseDashboardData {
       );
 }
 
-final nurseDashboardProvider = FutureProvider.autoDispose<NurseDashboardData>((ref) async {
+final doctorDashboardProvider = FutureProvider.autoDispose<DoctorDashboardData>((ref) async {
   final api = ref.watch(apiClientProvider);
-  final data = await api.get('/dashboard/nurse');
-  return NurseDashboardData.fromJson(data);
+  final data = await api.get('/dashboard/doctor');
+  return DoctorDashboardData.fromJson(data);
 });
 
-final nurseEscalationsProvider = FutureProvider.autoDispose<List<Escalation>>((ref) async {
+final doctorEscalationsProvider = FutureProvider.autoDispose<List<Escalation>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/escalations', query: {'scope': 'mine'});
   final items = data['items'] as List<dynamic>? ?? (data['data'] as List<dynamic>? ?? []);
@@ -147,7 +147,7 @@ class EscalationActions {
     required String resolutionNotes,
     required bool followUpRequired,
     required bool escalateToDoctor,
-    String? nurseNotes,
+    String? doctorNotes,
   }) async {
     await _ref.read(apiClientProvider).post('/escalations/$escalationId/resolve', data: {
       'patientContacted': patientContacted,
@@ -155,9 +155,9 @@ class EscalationActions {
       'resolution': resolutionNotes,
       'followUpRequired': followUpRequired,
       'escalateToDoctor': escalateToDoctor,
-      // API field is `notes`; sending `nurseNotes` was rejected outright by
+      // API field is `notes`; sending `doctorNotes` would be rejected outright by
       // ValidationPipe's forbidNonWhitelisted.
-      'notes': nurseNotes,
+      'notes': doctorNotes,
     });
   }
 

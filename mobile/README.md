@@ -1,8 +1,12 @@
-# OrthoCare AI — Mobile App (Flutter)
+# Prime Ortho — Mobile App (Flutter)
 
-AI Support. Human Care. Better Recovery.
+Expert Care. Faster Recovery.
 
-A single Flutter codebase serving three roles — **Nurse**, **Patient**, and **Admin/Doctor** — against the OrthoCare AI NestJS backend. There is no separate web admin app: the admin/doctor dashboard is built as additional screens in this same app, gated by role.
+A single Flutter codebase serving **Doctors**, **Admins**, and account-less **Patients** against the Prime Ortho NestJS backend. There is no separate web admin app: the admin dashboard is built as additional screens in this same app, gated by role.
+
+Staff (doctors and admins) sign in; patients never do — they enter a phone number once, which both starts their chat session and gives a doctor a number to call back on if their question is escalated.
+
+The product does not present itself as AI anywhere in the UI: the assistant is "the clinic assistant", and no screen or message tells a patient an AI is answering.
 
 ## Toolchain: pinned to Flutter 3.44.0
 
@@ -18,7 +22,7 @@ flutter create --platforms=android --org com.orthocare.ai --project-name orthoca
 ```
 
 Then re-apply the three customizations `flutter create` overwrites in `android/app/src/main/AndroidManifest.xml`:
-1. `android:label="OrthoCare AI"`
+1. `android:label="Prime Ortho"`
 2. the `INTERNET` / `CALL_PHONE` / `POST_NOTIFICATIONS` permissions
 3. `android:networkSecurityConfig="@xml/network_security_config"`
 
@@ -87,37 +91,47 @@ The app calls Firebase (`firebase_core`, `firebase_messaging`) for FCM push, but
 1. Splash (`/splash`) — restores session from secure storage, routes by role.
 2. Login (`/login`) — role is returned by the backend, not chosen in the UI.
 
-**Nurse**
-3. Dashboard (`/nurse/dashboard`) — today's shift, ACTIVE/OFFLINE punch state, new/pending/resolved counts, average response time.
-4. Shift (`/nurse/shift`).
+**Doctor**
+3. Dashboard (`/doctor/dashboard`) — today's shift, ACTIVE/OFFLINE punch state, new/pending/resolved counts, average response time.
+4. Shift (`/doctor/shift`).
 5. Punch In/Out — action on the dashboard, idempotent against double-tap.
-6. Escalations list (`/nurse/escalations`) — urgent cases sorted first.
-7. Escalation detail (`/nurse/escalations/:id`) — patient info, AI conversation, source documents, Call Patient / Mark Contacted / Resolve (full resolution form) / Escalate to Doctor.
-8. Profile (`/nurse/profile`).
+6. Escalations list (`/doctor/escalations`) — urgent cases sorted first.
+7. Escalation detail (`/doctor/escalations/:id`) — patient info, conversation, source documents, Call Patient / Mark Contacted / Resolve (full resolution form) / Escalate to Senior.
+8. Profile (`/doctor/profile`) — also the entry point to Change Password.
 
 **Patient**
 9. Dashboard (`/patient/dashboard`).
-10. AI Chat (`/patient/chat`) — example-question chips, chat bubbles, "Was this helpful? Yes / No, talk to nurse" under each AI answer.
+10. Chat (`/patient/chat`) — example-question chips, chat bubbles, "Was this helpful? Yes / No, talk to a doctor" under each answer.
 11. Chat history (`/patient/history`).
 12. Escalation status (`/patient/escalations`) — tracks tickets the patient raised.
 
-**Admin / Doctor** (folded into this app, not a separate web dashboard)
-13. Dashboard (`/admin/dashboard`) — Active Nurses / Patient Chats / AI Resolved / Human Escalations / Pending / Urgent cards, plus a Nurse Performance table.
-14. Nurse Management (`/admin/nurses`) — list/add/edit nurses.
-15. Shift Management (`/admin/shifts`) — list/add/delete shifts per nurse.
+**Admin** (folded into this app, not a separate web dashboard)
+13. Dashboard (`/admin/dashboard`) — Active Doctors / Patient Chats / Resolved Instantly / Human Escalations / Pending / Urgent cards, plus a Doctor Performance table.
+14. Doctor Management (`/admin/doctors`) — list/add/edit doctors.
+15. Shift Management (`/admin/shifts`) — list/add/delete shifts per doctor.
 16. Attendance (`/admin/attendance`) — punch-in/out report table.
-17. Escalations (`/admin/escalations`) — all cases across all nurses; tapping one reuses the nurse Escalation Detail screen (server-side role check applies).
+17. Escalations (`/admin/escalations`) — all cases across all doctors; tapping one reuses the doctor Escalation Detail screen (server-side role check applies).
 18. Document Knowledge Base (`/admin/knowledge`) — upload PDF/DOCX, status per document (Uploading → Processing → Ready/Active/Failed), Activate/Archive/Reprocess/Delete.
+
+**Shared (staff)**
+19. Change Password (`/change-password`) — current + new password; how staff move off the temporary password. Reachable from the doctor Profile screen, and gated to signed-in staff (an account-less patient session is redirected away).
 
 ## REST contract
 
 `lib/core/network/api_client.dart` calls the endpoints listed in the product spec (section 54): `/auth/*`, `/attendance/*`, `/shifts`, `/chat/*`, `/knowledge/documents*`, `/escalations*`, `/dashboard`, `/reports/*`.
 
-Two endpoint groups are used by the admin screens but were **not** enumerated in the original spec's endpoint list — they need to exist on the backend for Nurse/Shift Management to work:
+Beyond the spec's original endpoint list, these are also consumed:
 
-- `GET /nurses`, `POST /nurses`, `PUT /nurses/:id`, `DELETE /nurses/:id`
-- `GET /escalations?scope=all` (admin: every case) vs. `GET /escalations?scope=mine` (nurse: assigned to me / patient: raised by me)
-- `GET /dashboard/nurse` — a nurse-scoped variant of the admin `/dashboard` stats (today's shift, attendance, new/pending/resolved counts, average response time) consumed by the Nurse Dashboard screen
+- `GET /doctors`, `POST /doctors`, `PUT /doctors/:id`, `DELETE /doctors/:id` — Doctor Management
+- `GET /dashboard/doctor` — a doctor-scoped variant of the admin `/dashboard` stats (today's shift, attendance, new/pending/resolved counts, average response time), consumed by the Doctor Dashboard
+- `POST /auth/change-password` — `{currentPassword, newPassword}`, JWT-required, used by the Change Password screen
+- `GET /escalations` is role-scoped server-side: staff by JWT, patients by `?sessionId=`
+
+Field names follow the backend contract exactly — `doctorId` / `doctorName` / `assignedDoctorId` / `assignedDoctorName` / `activeDoctors` / `resolvedByAssistant` / `doctorPerformance`. The JSON key `aiResponse` is deliberately left as-is: it is never shown to a user, and renaming it would break the contract for no benefit.
+
+### Timestamps
+
+The API sends UTC ISO-8601 instants. Every model parses them through `parseApiDateTime` / `parseApiDateTimeOr` in `lib/core/util/date_time_x.dart`, which calls `.toLocal()` — without that, screens rendered UTC and clinic staff saw times hours behind their phone's clock. Shift windows are the exception: `startTime`/`endTime` are `"HH:mm"` wall-clock strings in the clinic's own day and must never be timezone-shifted.
 
 ## Known gaps
 
@@ -127,3 +141,8 @@ Two endpoint groups are used by the admin screens but were **not** enumerated in
 - **The app has not been run on a real device or emulator yet** — analyze and the release build pass, but no runtime/UI verification has happened.
 - `flutter pub outdated` will show newer versions available for several packages; they're pinned to what's known-good with 3.44.0.
 - iOS was intentionally not scaffolded — the product spec targets Android only.
+- The Android `applicationId` / Kotlin package / Dart package name are still `com.orthocare.ai.orthocare_ai` / `orthocare_ai`. These are deliberately **not** renamed: changing `applicationId` makes it a different app to Android (no in-place upgrade, and it must match the Firebase `google-services.json` package), and changing the Dart package name breaks every `package:` import. Only the user-visible name (`android:label`, in-app text) is Prime Ortho. The secure-storage keys are likewise still `orthocare_*` — renaming them would silently sign out every existing install.
+
+## Attribution
+
+`lib/widgets/powered_by_practigo.dart` renders a quiet "Powered by PractiGo" credit linking to `https://practigo.in`. It is intentionally muted, caption-sized, and placed only on peripheral surfaces — the welcome screen, the staff login screen, and the doctor Profile screen. It is deliberately **absent** from the patient chat, the message list, case/escalation screens, and the whole escalation flow: a patient asking a post-operative question should never see it mid-task. The launch is wrapped in a silent try/catch so a dead link can never surface an error.

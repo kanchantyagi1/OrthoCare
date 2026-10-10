@@ -10,16 +10,16 @@ const _exampleQuestions = [
   'I have a question about my recovery.',
 ];
 
-class AiChatScreen extends ConsumerStatefulWidget {
-  const AiChatScreen({super.key, this.sessionId});
+class ChatScreen extends ConsumerStatefulWidget {
+  const ChatScreen({super.key, this.sessionId});
 
   final String? sessionId;
 
   @override
-  ConsumerState<AiChatScreen> createState() => _AiChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _AiChatScreenState extends ConsumerState<AiChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -63,7 +63,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final chatState = ref.watch(chatControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('OrthoCare AI')),
+      appBar: AppBar(title: const Text('Ask a Question')),
       // resizeToAvoidBottomInset defaults to true — keep it so the input bar
       // rises above the keyboard rather than being covered by it.
       body: SafeArea(
@@ -183,7 +183,7 @@ class _ChatBubble extends ConsumerWidget {
                 style: TextStyle(color: isPatient ? scheme.onPrimary : scheme.onSurface),
               ),
             ),
-            if (message.sender == MessageSender.ai && message.helpful == null)
+            if (message.sender == MessageSender.assistant && message.helpful == null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -198,15 +198,15 @@ class _ChatBubble extends ConsumerWidget {
                     ),
                     TextButton.icon(
                       onPressed: () async {
-                        final id = await ref.read(chatControllerProvider.notifier).requestNurse(message);
+                        final id = await ref.read(chatControllerProvider.notifier).requestDoctor(message);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(id != null ? 'A nurse has been notified.' : 'Request sent.')),
+                            SnackBar(content: Text(id != null ? 'A doctor has been notified.' : 'Request sent.')),
                           );
                         }
                       },
                       icon: const Icon(Icons.thumb_down_outlined, size: 16),
-                      label: const Text('No, talk to nurse'),
+                      label: const Text('No, talk to a doctor'),
                     ),
                   ],
                 ),

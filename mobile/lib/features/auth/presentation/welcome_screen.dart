@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../widgets/powered_by_practigo.dart';
+
 /// Entry point. Patients continue without any account; only clinic staff
-/// (nurse / doctor / admin) sign in.
+/// (doctor / admin) sign in.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
@@ -21,10 +23,10 @@ class WelcomeScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.health_and_safety_rounded, size: 56, color: theme.colorScheme.primary),
                   const SizedBox(height: 16),
-                  Text('OrthoCare AI', style: theme.textTheme.headlineMedium, textAlign: TextAlign.center),
+                  Text('Prime Ortho', style: theme.textTheme.headlineMedium, textAlign: TextAlign.center),
                   const SizedBox(height: 8),
                   Text(
-                    'AI Support. Human Care. Better Recovery.',
+                    'Expert Care. Faster Recovery.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: theme.colorScheme.outline),
                   ),
@@ -52,6 +54,8 @@ class WelcomeScreen extends StatelessWidget {
                       child: const Text('Clinic staff sign in'),
                     ),
                   ),
+                  const SizedBox(height: 40),
+                  const PoweredByPractiGo(),
                 ],
               ),
             ),

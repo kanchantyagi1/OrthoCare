@@ -1,9 +1,7 @@
-enum UserRole { nurse, patient, doctor, admin }
+enum UserRole { patient, doctor, admin }
 
 UserRole roleFromString(String value) {
   switch (value.toLowerCase()) {
-    case 'nurse':
-      return UserRole.nurse;
     case 'patient':
       return UserRole.patient;
     case 'doctor':
@@ -31,7 +29,7 @@ class AppUser {
   });
 
   /// The API returns `fullName`; `name` is accepted as a fallback. Reading only
-  /// `name` left this empty, so the nurse dashboard greeted people with "Hello ".
+  /// `name` left this empty, so the doctor dashboard greeted people with "Hello ".
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
         id: json['id'] as String,
         name: (json['fullName'] ?? json['name']) as String? ?? '',

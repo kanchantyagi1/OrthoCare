@@ -1,4 +1,6 @@
-enum MessageSender { patient, ai, system }
+import '../core/util/date_time_x.dart';
+
+enum MessageSender { patient, assistant, system }
 
 class ChatMessage {
   final String id;
@@ -25,7 +27,7 @@ class ChatMessage {
         id: json['id'] as String,
         sender: _senderFrom((json['role'] ?? json['sender']) as String?),
         text: (json['message'] ?? json['text']) as String? ?? '',
-        createdAt: DateTime.parse(json['createdAt'] as String),
+        createdAt: parseApiDateTimeOr(json['createdAt']),
         needsHumanFollowUp:
             (json['needsHuman'] ?? json['needsHumanFollowUp']) as bool? ?? false,
         escalationId: json['escalationId'] as String?,
@@ -36,7 +38,7 @@ class ChatMessage {
     switch (value) {
       case 'assistant':
       case 'ai':
-        return MessageSender.ai;
+        return MessageSender.assistant;
       case 'system':
         return MessageSender.system;
       default:
@@ -64,7 +66,7 @@ class ChatSession {
 
   factory ChatSession.fromJson(Map<String, dynamic> json) => ChatSession(
         id: json['id'] as String,
-        createdAt: DateTime.parse(json['createdAt'] as String),
+        createdAt: parseApiDateTimeOr(json['createdAt']),
         lastMessagePreview: json['lastMessagePreview'] as String?,
       );
 }

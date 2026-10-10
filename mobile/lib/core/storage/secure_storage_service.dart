@@ -13,7 +13,7 @@ class SecureStorageService {
     aOptions: AndroidOptions(),
   );
 
-  // Staff (nurse/admin/doctor) session - JWT based.
+  // Staff (doctor/admin) session - JWT based.
   static const _kAccessToken = 'orthocare_access_token';
   static const _kUserId = 'orthocare_user_id';
   static const _kUserRole = 'orthocare_user_role';

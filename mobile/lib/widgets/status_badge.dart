@@ -10,11 +10,11 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (color, label) = switch (status) {
-      EscalationStatus.waitingForNurse => (scheme.error, 'Waiting for nurse'),
+      EscalationStatus.waitingForDoctor => (scheme.error, 'Waiting for doctor'),
       EscalationStatus.assigned => (scheme.tertiary, 'Assigned'),
       EscalationStatus.contacted => (scheme.primary, 'Contacted'),
       EscalationStatus.resolved => (Colors.green, 'Resolved'),
-      EscalationStatus.escalatedToDoctor => (scheme.secondary, 'Escalated to doctor'),
+      EscalationStatus.escalatedToDoctor => (scheme.secondary, 'Escalated to senior'),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

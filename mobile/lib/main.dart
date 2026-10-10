@@ -11,5 +11,5 @@ Future<void> main() async {
   // configured (no google-services.json), just without push notifications.
   await PushNotificationService.instance.initialize();
 
-  runApp(const ProviderScope(child: OrthoCareApp()));
+  runApp(const ProviderScope(child: PrimeOrthoApp()));
 }

@@ -7,21 +7,21 @@ import '../../../models/escalation.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../../../widgets/priority_chip.dart';
 import '../../../widgets/status_badge.dart';
-import '../nurse_controller.dart';
+import '../doctor_controller.dart';
 
 class EscalationsListScreen extends ConsumerWidget {
   const EscalationsListScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final escalations = ref.watch(nurseEscalationsProvider);
+    final escalations = ref.watch(doctorEscalationsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Cases')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(nurseEscalationsProvider),
+        onRefresh: () async => ref.invalidate(doctorEscalationsProvider),
         child: escalations.when(
           loading: () => const LoadingOverlay(),
-          error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(nurseEscalationsProvider)),
+          error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(doctorEscalationsProvider)),
           data: (items) {
             if (items.isEmpty) {
               return const EmptyStateView(message: 'No cases right now.', icon: Icons.check_circle_outline);
@@ -42,7 +42,7 @@ class EscalationsListScreen extends ConsumerWidget {
                 final e = sorted[i];
                 return Card(
                   child: ListTile(
-                    onTap: () => context.push('/nurse/escalations/${e.id}'),
+                    onTap: () => context.push('/doctor/escalations/${e.id}'),
                     title: Text(e.patientName, style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Padding(
                       padding: const EdgeInsets.only(top: 4),

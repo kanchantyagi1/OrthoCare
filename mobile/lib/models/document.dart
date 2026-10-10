@@ -1,3 +1,5 @@
+import '../core/util/date_time_x.dart';
+
 enum DocumentStatus { uploaded, processing, readyForReview, active, failed, archived, demoReviewRequired }
 
 DocumentStatus documentStatusFromString(String value) {
@@ -51,7 +53,7 @@ class KnowledgeDocument {
         version: json['version'] as String? ?? '1',
         status: documentStatusFromString(json['status'] as String? ?? 'UPLOADED'),
         uploadedByName: json['uploadedByName'] as String? ?? '',
-        uploadedAt: DateTime.parse(json['uploadedAt'] as String),
+        uploadedAt: parseApiDateTimeOr(json['uploadedAt']),
         chunkCount: json['chunkCount'] as int? ?? 0,
         failureReason: json['failureReason'] as String?,
       );

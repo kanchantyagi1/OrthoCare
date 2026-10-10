@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../widgets/powered_by_practigo.dart';
 import '../auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -62,7 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Text('Clinic staff sign in', style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
                     const SizedBox(height: 4),
                     Text(
-                      'For nurses, doctors and clinic admins. Patients do not need an account.',
+                      'For doctors and clinic admins. Patients do not need an account.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Theme.of(context).colorScheme.outline),
                     ),
@@ -94,6 +95,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Text('Log in'),
                     ),
+                    const SizedBox(height: 32),
+                    const Center(child: PoweredByPractiGo()),
                   ],
                 ),
               ),

@@ -8,10 +8,9 @@ import '../../../widgets/priority_chip.dart';
 import '../../../widgets/status_badge.dart';
 import '../admin_controller.dart';
 
-/// Admin/doctor view of every escalation across all nurses (spec section 37).
-/// Tapping a row reuses the nurse Escalation Detail screen at
-/// /nurse/escalations/:id, which already exposes the doctor-escalation
-/// action and is authorization-gated server-side by role.
+/// Admin view of every escalation across all doctors (spec section 37).
+/// Tapping a row reuses the doctor Escalation Detail screen at
+/// /doctor/escalations/:id, which is authorization-gated server-side by role.
 class AdminEscalationsScreen extends ConsumerWidget {
   const AdminEscalationsScreen({super.key});
 
@@ -48,7 +47,7 @@ class AdminEscalationsScreen extends ConsumerWidget {
                       Text(DateFormat.MMMd().add_jm().format(e.createdAt), style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
-                  onTap: () => context.push('/nurse/escalations/${e.id}'),
+                  onTap: () => context.push('/doctor/escalations/${e.id}'),
                 );
               },
             );

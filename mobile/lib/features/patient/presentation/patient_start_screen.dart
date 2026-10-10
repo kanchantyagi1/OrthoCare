@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../patient_session_controller.dart';
 
 /// Patients have no login. They enter a phone number once, which starts their
-/// chat session and is the number a nurse calls back on if their question is
+/// chat session and is the number a doctor calls back on if their question is
 /// escalated.
 class PatientStartScreen extends ConsumerStatefulWidget {
   const PatientStartScreen({super.key});
@@ -67,7 +67,7 @@ class _PatientStartScreenState extends ConsumerState<PatientStartScreen> {
                     Text('Your phone number', style: theme.textTheme.titleLarge),
                     const SizedBox(height: 8),
                     Text(
-                      'We use this only so a clinic nurse can call you back if your '
+                      'We use this only so a clinic doctor can call you back if your '
                       'question needs a human. No password, no account.',
                       style: TextStyle(color: theme.colorScheme.outline),
                     ),

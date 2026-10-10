@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Android blocks plain HTTP by default (targeting API 28+). The OrthoCare backend is
+  Android blocks plain HTTP by default (targeting API 28+). The Prime Ortho backend is
   deployed without a domain/TLS for now (see docs/DEPLOYMENT.md "coexisting on
   wahflow-server" section) so the app talks to it over http://<server-ip>:8081.
 

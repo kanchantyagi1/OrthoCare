@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import '../core/util/date_time_x.dart';
+
 /// A shift is a *daily recurring time-of-day window*, not a date range: the
 /// backend stores `startTime`/`endTime` as "HH:mm" strings (see spec section 30,
 /// e.g. 09:00-12:00). Passing those to DateTime.parse throws
@@ -7,16 +9,16 @@ import 'package:intl/intl.dart';
 /// comparisons are done lexicographically, which is valid for zero-padded HH:mm.
 class Shift {
   final String id;
-  final String nurseId;
-  final String nurseName;
+  final String doctorId;
+  final String doctorName;
   final String? label;
   final String startTime;
   final String endTime;
 
   const Shift({
     required this.id,
-    required this.nurseId,
-    required this.nurseName,
+    required this.doctorId,
+    required this.doctorName,
     this.label,
     required this.startTime,
     required this.endTime,
@@ -24,8 +26,8 @@ class Shift {
 
   factory Shift.fromJson(Map<String, dynamic> json) => Shift(
         id: json['id'] as String,
-        nurseId: json['nurseId'] as String? ?? '',
-        nurseName: json['nurseName'] as String? ?? '',
+        doctorId: json['doctorId'] as String? ?? '',
+        doctorName: json['doctorName'] as String? ?? '',
         label: json['label'] as String?,
         startTime: json['startTime'] as String? ?? '00:00',
         endTime: json['endTime'] as String? ?? '00:00',
@@ -74,7 +76,7 @@ class AttendanceRecord {
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) => AttendanceRecord(
         id: json['id'] as String,
         shiftId: json['shiftId'] as String?,
-        punchIn: DateTime.parse(json['punchIn'] as String),
-        punchOut: json['punchOut'] != null ? DateTime.parse(json['punchOut'] as String) : null,
+        punchIn: parseApiDateTimeOr(json['punchIn']),
+        punchOut: parseApiDateTime(json['punchOut']),
       );
 }

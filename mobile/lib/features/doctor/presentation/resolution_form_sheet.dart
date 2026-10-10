@@ -6,7 +6,7 @@ class ResolutionFormResult {
   final String resolutionNotes;
   final bool followUpRequired;
   final bool escalateToDoctor;
-  final String nurseNotes;
+  final String doctorNotes;
 
   const ResolutionFormResult({
     required this.patientContacted,
@@ -14,7 +14,7 @@ class ResolutionFormResult {
     required this.resolutionNotes,
     required this.followUpRequired,
     required this.escalateToDoctor,
-    required this.nurseNotes,
+    required this.doctorNotes,
   });
 }
 
@@ -28,7 +28,7 @@ const _issueCategories = [
   'Other',
 ];
 
-/// Nurse resolution form, per product spec section 33.
+/// Doctor resolution form, per product spec section 33.
 Future<ResolutionFormResult?> showResolutionForm(BuildContext context) {
   return showModalBottomSheet<ResolutionFormResult>(
     context: context,
@@ -102,14 +102,14 @@ class _ResolutionFormSheetState extends State<_ResolutionFormSheet> {
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Escalate to doctor?'),
+              title: const Text('Escalate to senior doctor?'),
               value: _escalateToDoctor,
               onChanged: (v) => setState(() => _escalateToDoctor = v),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _notesController,
-              decoration: const InputDecoration(labelText: 'Nurse notes (optional)'),
+              decoration: const InputDecoration(labelText: 'Doctor notes (optional)'),
               maxLines: 2,
             ),
             const SizedBox(height: 20),
@@ -121,7 +121,7 @@ class _ResolutionFormSheetState extends State<_ResolutionFormSheet> {
                   resolutionNotes: _resolutionController.text.trim(),
                   followUpRequired: _followUpRequired,
                   escalateToDoctor: _escalateToDoctor,
-                  nurseNotes: _notesController.text.trim(),
+                  doctorNotes: _notesController.text.trim(),
                 ),
               ),
               child: const Text('Mark Resolved'),

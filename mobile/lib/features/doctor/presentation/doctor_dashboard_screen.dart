@@ -5,14 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../../auth/auth_controller.dart';
-import '../nurse_controller.dart';
+import '../doctor_controller.dart';
 
-class NurseDashboardScreen extends ConsumerWidget {
-  const NurseDashboardScreen({super.key});
+class DoctorDashboardScreen extends ConsumerWidget {
+  const DoctorDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dashboard = ref.watch(nurseDashboardProvider);
+    final dashboard = ref.watch(doctorDashboardProvider);
     final attendance = ref.watch(attendanceControllerProvider);
     final user = ref.watch(authControllerProvider).user;
 
@@ -36,22 +36,22 @@ class NurseDashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         // Guard on empty, not just null: an absent name arrives as '' and
         // rendered a bare "Hello ".
-        title: Text('Hello ${(user?.name.isNotEmpty ?? false) ? user!.name : 'Nurse'}'),
+        title: Text('Hello ${(user?.name.isNotEmpty ?? false) ? user!.name : 'Doctor'}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline),
-            onPressed: () => context.push('/nurse/profile'),
+            onPressed: () => context.push('/doctor/profile'),
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(nurseDashboardProvider);
+          ref.invalidate(doctorDashboardProvider);
           await ref.read(attendanceControllerProvider.notifier).refresh();
         },
         child: dashboard.when(
           loading: () => const LoadingOverlay(),
-          error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(nurseDashboardProvider)),
+          error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(doctorDashboardProvider)),
           data: (data) {
             final isActive = attendance.valueOrNull?.status.name == 'active';
             return ListView(
@@ -86,7 +86,7 @@ class NurseDashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: () => context.push('/nurse/escalations'),
+                  onPressed: () => context.push('/doctor/escalations'),
                   icon: const Icon(Icons.inbox_outlined),
                   label: const Text('View Cases'),
                 ),

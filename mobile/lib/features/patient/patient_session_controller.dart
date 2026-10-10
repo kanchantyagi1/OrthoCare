@@ -7,7 +7,7 @@ enum PatientSessionStatus { unknown, none, active }
 
 /// Patients do not have accounts and never log in (product decision): they
 /// enter a phone number once, which both starts their chat session and gives
-/// the nurse a number to call back on if the question gets escalated.
+/// the doctor a number to call back on if the question gets escalated.
 ///
 /// The server-issued `sessionId` is the patient's only credential, so it is
 /// kept in secure storage and sent explicitly on every patient request.

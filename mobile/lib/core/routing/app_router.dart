@@ -6,18 +6,19 @@ import '../../features/admin/presentation/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/admin_escalations_screen.dart';
 import '../../features/admin/presentation/attendance_screen.dart';
 import '../../features/admin/presentation/knowledge_base_screen.dart';
-import '../../features/admin/presentation/nurse_management_screen.dart';
+import '../../features/admin/presentation/doctor_management_screen.dart';
 import '../../features/admin/presentation/shift_management_screen.dart';
 import '../../features/auth/auth_controller.dart';
+import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/welcome_screen.dart';
-import '../../features/nurse/presentation/escalation_detail_screen.dart';
-import '../../features/nurse/presentation/escalations_list_screen.dart';
-import '../../features/nurse/presentation/nurse_dashboard_screen.dart';
-import '../../features/nurse/presentation/profile_screen.dart';
-import '../../features/nurse/presentation/shift_screen.dart';
-import '../../features/patient/presentation/ai_chat_screen.dart';
+import '../../features/doctor/presentation/doctor_dashboard_screen.dart';
+import '../../features/doctor/presentation/escalation_detail_screen.dart';
+import '../../features/doctor/presentation/escalations_list_screen.dart';
+import '../../features/doctor/presentation/profile_screen.dart';
+import '../../features/doctor/presentation/shift_screen.dart';
+import '../../features/patient/presentation/chat_screen.dart';
 import '../../features/patient/presentation/chat_history_screen.dart';
 import '../../features/patient/presentation/escalation_status_screen.dart';
 import '../../features/patient/presentation/patient_dashboard_screen.dart';
@@ -40,9 +41,8 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 /// patient-role account can't hard-crash the router.
 String _homeFor(UserRole role) {
   switch (role) {
-    case UserRole.nurse:
-      return '/nurse/dashboard';
     case UserRole.doctor:
+      return '/doctor/dashboard';
     case UserRole.admin:
       return '/admin/dashboard';
     case UserRole.patient:
@@ -73,14 +73,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final staffSignedIn = auth.status == AuthStatus.authenticated;
       final patientActive = patient.status == PatientSessionStatus.active;
 
-      // Staff take precedence: a signed-in nurse/admin lands in their section.
+      // Staff take precedence: a signed-in doctor/admin lands in their section.
       if (staffSignedIn) {
         if (atSplash || atLogin || atWelcome || atPatientStart) return _homeFor(auth.user!.role);
         final role = auth.user!.role;
-        if (path.startsWith('/nurse') && role != UserRole.nurse) return _homeFor(role);
-        if (path.startsWith('/admin') && role != UserRole.doctor && role != UserRole.admin) {
-          return _homeFor(role);
-        }
+        if (path.startsWith('/doctor') && role != UserRole.doctor) return _homeFor(role);
+        if (path.startsWith('/admin') && role != UserRole.admin) return _homeFor(role);
         // Staff have no business in the patient-facing chat.
         if (path.startsWith('/patient')) return _homeFor(role);
         return null;
@@ -89,8 +87,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Patients: no login, just a phone-number session.
       if (patientActive) {
         if (atSplash || atWelcome || atPatientStart) return '/patient/dashboard';
-        // Not signed in as staff, so staff sections are off limits.
-        if (path.startsWith('/nurse') || path.startsWith('/admin')) return '/patient/dashboard';
+        // Not signed in as staff, so staff sections - and the staff-only
+        // password change screen - are off limits.
+        if (path.startsWith('/doctor') || path.startsWith('/admin') || path == '/change-password') {
+          return '/patient/dashboard';
+        }
         return null;
       }
 
@@ -104,29 +105,30 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/welcome', builder: (context, state) => const WelcomeScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/patient/start', builder: (context, state) => const PatientStartScreen()),
+      GoRoute(path: '/change-password', builder: (context, state) => const ChangePasswordScreen()),
 
-      // Nurse
-      GoRoute(path: '/nurse/dashboard', builder: (context, state) => const NurseDashboardScreen()),
-      GoRoute(path: '/nurse/shift', builder: (context, state) => const ShiftScreen()),
-      GoRoute(path: '/nurse/escalations', builder: (context, state) => const EscalationsListScreen()),
+      // Doctor
+      GoRoute(path: '/doctor/dashboard', builder: (context, state) => const DoctorDashboardScreen()),
+      GoRoute(path: '/doctor/shift', builder: (context, state) => const ShiftScreen()),
+      GoRoute(path: '/doctor/escalations', builder: (context, state) => const EscalationsListScreen()),
       GoRoute(
-        path: '/nurse/escalations/:id',
+        path: '/doctor/escalations/:id',
         builder: (context, state) => EscalationDetailScreen(escalationId: state.pathParameters['id']!),
       ),
-      GoRoute(path: '/nurse/profile', builder: (context, state) => const ProfileScreen()),
+      GoRoute(path: '/doctor/profile', builder: (context, state) => const ProfileScreen()),
 
       // Patient
       GoRoute(path: '/patient/dashboard', builder: (context, state) => const PatientDashboardScreen()),
       GoRoute(
         path: '/patient/chat',
-        builder: (context, state) => AiChatScreen(sessionId: state.uri.queryParameters['sessionId']),
+        builder: (context, state) => ChatScreen(sessionId: state.uri.queryParameters['sessionId']),
       ),
       GoRoute(path: '/patient/history', builder: (context, state) => const ChatHistoryScreen()),
       GoRoute(path: '/patient/escalations', builder: (context, state) => const EscalationStatusScreen()),
 
       // Admin / Doctor
       GoRoute(path: '/admin/dashboard', builder: (context, state) => const AdminDashboardScreen()),
-      GoRoute(path: '/admin/nurses', builder: (context, state) => const NurseManagementScreen()),
+      GoRoute(path: '/admin/doctors', builder: (context, state) => const DoctorManagementScreen()),
       GoRoute(path: '/admin/shifts', builder: (context, state) => const ShiftManagementScreen()),
       GoRoute(path: '/admin/attendance', builder: (context, state) => const AttendanceScreen()),
       GoRoute(path: '/admin/escalations', builder: (context, state) => const AdminEscalationsScreen()),
