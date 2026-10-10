@@ -14,9 +14,23 @@ export class ShiftsService {
     return this.repo.find({ order: { startTime: 'ASC' } });
   }
 
-  /** Flat rows including the doctor's name; times stay as "HH:mm" strings. */
+  /**
+   * Flat rows including the doctor's name; times stay as "HH:mm" strings.
+   *
+   * Excludes shifts belonging to a removed (deactivated) doctor. DoctorsService
+   * already deactivates a doctor's own shifts when the doctor is removed, but this
+   * filter also covers the case of a shift left over from before that fix, or any
+   * other path that deactivates a doctor without going through it.
+   */
   async listForApi(): Promise<ShiftListItem[]> {
-    const shifts = await this.repo.find({ relations: ['doctor', 'doctor.user'], order: { startTime: 'ASC' } });
+    const shifts = await this.repo
+      .createQueryBuilder('shift')
+      .innerJoinAndSelect('shift.doctor', 'doctor')
+      .leftJoinAndSelect('doctor.user', 'user')
+      .where('shift.is_active = true')
+      .andWhere('doctor.is_active = true')
+      .orderBy('shift.start_time', 'ASC')
+      .getMany();
     return shifts.map(toShiftListItem);
   }
 

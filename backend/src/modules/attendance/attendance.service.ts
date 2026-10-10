@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, MoreThanOrEqual, Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
 import { Shift } from '../shifts/entities/shift.entity';
@@ -46,16 +46,51 @@ export class AttendanceService {
     });
   }
 
+  /**
+   * The doctor's attendance row for the current *clinic* day, if one already exists -
+   * open or closed. At most one such row can exist: punchIn() only ever reopens this
+   * row or creates it when absent, which is also what the DB-level unique index
+   * (one row per doctor per clinic day) enforces.
+   */
+  private async findTodayAttendance(doctorId: string) {
+    return this.attendanceRepo.findOne({
+      where: { doctorId, punchIn: MoreThanOrEqual(clinicStartOfDay(this.clinicTimeZone)) },
+    });
+  }
+
+  /**
+   * One row per doctor per clinic day, holding the day's first punch-in and latest
+   * punch-out - not a new row per punch cycle. "Punch in" therefore means: if already
+   * punched in, no-op; else if today already has a (punched-out) row, reopen it
+   * (clearing punch_out, keeping its original punch_in); else this is the day's first
+   * punch, create the row.
+   */
   async punchIn(doctorId: string, dto: PunchInDto, actorUserId?: string) {
-    const existing = await this.findOpenAttendance(doctorId);
-    if (existing) {
-      // Idempotent: doctor is already punched in, do not create a duplicate.
-      return { attendance: existing, duplicate: true };
+    const openExisting = await this.findOpenAttendance(doctorId);
+    if (openExisting) {
+      // Idempotent: doctor is already punched in, do not create a duplicate. (If this
+      // open row is from a previous clinic day because they forgot to punch out, it
+      // is still the row representing their continuous on-duty status - see today().)
+      return { attendance: openExisting, duplicate: true };
     }
 
     if (dto.shiftId) {
       const shift = await this.shiftRepo.findOne({ where: { id: dto.shiftId, doctorId } });
       if (!shift) throw new BadRequestException('Shift does not belong to this doctor');
+    }
+
+    const todayRow = await this.findTodayAttendance(doctorId);
+    if (todayRow) {
+      // Reopen: original punch_in is preserved, only punch_out is cleared.
+      // Must be an explicit null, not undefined - TypeORM's save() skips an
+      // undefined property instead of clearing the column, which would leave
+      // punch_out holding its old, stale value.
+      todayRow.punchOut = null as unknown as Date;
+      if (dto.shiftId) todayRow.shiftId = dto.shiftId;
+      if (dto.deviceId) todayRow.deviceId = dto.deviceId;
+      const saved = await this.attendanceRepo.save(todayRow);
+      await this.audit.record(AuditEvent.PUNCH_IN, actorUserId, { doctorId, attendanceId: saved.id });
+      return { attendance: saved, duplicate: false };
     }
 
     const attendance = this.attendanceRepo.create({
@@ -91,15 +126,17 @@ export class AttendanceService {
     // "Today" is the clinic's day, not the server's: with the host in UTC, a 09:00 IST
     // punch-in sits before the UTC midnight boundary only after 05:30 IST, so an early
     // shift's records would have been reported under the wrong day.
-    const startOfDay = clinicStartOfDay(this.clinicTimeZone);
-
     const open = await this.findOpenAttendance(doctorId);
-    const records = await this.attendanceRepo
-      .createQueryBuilder('a')
-      .where('a.doctor_id = :doctorId', { doctorId })
-      .andWhere('a.punch_in >= :startOfDay', { startOfDay })
-      .orderBy('a.punch_in', 'DESC')
-      .getMany();
+    const todayRow = await this.findTodayAttendance(doctorId);
+
+    // There is at most one row per clinic day, so this is usually just [todayRow].
+    // The one case they differ: a doctor forgot to punch out before midnight, so the
+    // still-open row's punch_in is yesterday's and findTodayAttendance (today's date)
+    // doesn't return it - included explicitly so status=ACTIVE is never paired with
+    // an empty records list, which was the original reported contradiction.
+    const records: Attendance[] = [];
+    if (todayRow) records.push(todayRow);
+    if (open && open.id !== todayRow?.id) records.push(open);
 
     return { status: open ? 'ACTIVE' : 'OFFLINE', records };
   }

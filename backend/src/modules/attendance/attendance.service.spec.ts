@@ -13,6 +13,11 @@ import { AttendanceService } from './attendance.service';
 function matches(actual: any, expected: any): boolean {
   if (expected instanceof FindOperator) {
     if (expected.type === 'isNull') return actual === null || actual === undefined;
+    if (expected.type === 'moreThanOrEqual') {
+      const actualTime = actual instanceof Date ? actual.getTime() : -Infinity;
+      const expectedTime = (expected.value as Date).getTime();
+      return actualTime >= expectedTime;
+    }
     throw new Error(`Unsupported FindOperator in test mock: ${expected.type}`);
   }
   if (expected === null) {
@@ -92,7 +97,7 @@ describe('AttendanceService', () => {
 
   // The reported bug: a doctor who punched out could never punch back in, because
   // findOpenAttendance matched the already-closed row and reported "already punched in".
-  it('allows punching in again after a punch-out, as a NEW attendance record', async () => {
+  it('allows punching in again after a punch-out', async () => {
     const attendanceRepo = makeRepo();
     const doctorRepo = makeRepo();
     const shiftRepo = makeRepo();
@@ -100,19 +105,148 @@ describe('AttendanceService', () => {
 
     const firstIn = await service.punchIn('doctor-1', {});
     await service.punchOut('doctor-1', {});
-
     const secondIn = await service.punchIn('doctor-1', {});
 
     expect(secondIn.duplicate).toBe(false);
-    expect(secondIn.attendance.id).not.toBe(firstIn.attendance.id);
-    expect(secondIn.attendance.punchOut).toBeUndefined();
-    expect(attendanceRepo.data()).toHaveLength(2);
+    expect(secondIn.attendance.punchOut).toBeFalsy();
+    // Same clinic day -> reopens the same row rather than creating a second one.
+    expect(secondIn.attendance.id).toBe(firstIn.attendance.id);
 
-    // ...and a third cycle, to prove it is not just the second one that works.
     await service.punchOut('doctor-1', {});
     const thirdIn = await service.punchIn('doctor-1', {});
     expect(thirdIn.duplicate).toBe(false);
-    expect(attendanceRepo.data()).toHaveLength(3);
+    expect(thirdIn.attendance.punchOut).toBeFalsy();
+    expect(thirdIn.attendance.id).toBe(firstIn.attendance.id);
+  });
+
+  // Second user-reported bug, fixed alongside the first: "don't create multiple
+  // entries for 1 doctor in a single day." Each punch-in used to insert a brand new
+  // row, so a doctor cycling punch-out/punch-in several times in one day produced
+  // several rows for that day instead of one holding first-in/last-out.
+  describe('one attendance row per doctor per clinic day', () => {
+    it('repeated punch-in/out cycles in one day collapse to a single row with first-in, last-out', async () => {
+      const attendanceRepo = makeRepo();
+      const service = new AttendanceService(
+        attendanceRepo as any,
+        makeRepo() as any,
+        makeRepo() as any,
+        fakeAudit,
+      );
+
+      const first = await service.punchIn('doctor-1', {});
+      expect(attendanceRepo.data()).toHaveLength(1);
+
+      await service.punchOut('doctor-1', {});
+      const second = await service.punchIn('doctor-1', {});
+      await service.punchOut('doctor-1', {});
+      const third = await service.punchIn('doctor-1', {});
+
+      // Still exactly one row - every cycle reopened/closed the same record.
+      expect(attendanceRepo.data()).toHaveLength(1);
+      expect(second.attendance.id).toBe(first.attendance.id);
+      expect(third.attendance.id).toBe(first.attendance.id);
+    });
+
+    it('reopening preserves the day\'s original punch_in', async () => {
+      const attendanceRepo = makeRepo();
+      const service = new AttendanceService(
+        attendanceRepo as any,
+        makeRepo() as any,
+        makeRepo() as any,
+        fakeAudit,
+      );
+
+      const first = await service.punchIn('doctor-1', {});
+      const originalPunchIn = first.attendance.punchIn;
+
+      await service.punchOut('doctor-1', {});
+      const reopened = await service.punchIn('doctor-1', {});
+
+      expect(reopened.attendance.punchIn).toBe(originalPunchIn);
+      expect(reopened.attendance.punchOut).toBeFalsy();
+    });
+
+    it('the stored punch_out is always the LATEST one, not the first', async () => {
+      const attendanceRepo = makeRepo();
+      const service = new AttendanceService(
+        attendanceRepo as any,
+        makeRepo() as any,
+        makeRepo() as any,
+        fakeAudit,
+      );
+
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-01T04:00:00Z'));
+      await service.punchIn('doctor-1', {});
+      const firstOut = await service.punchOut('doctor-1', {});
+      // Snapshot as a primitive immediately: the mock repo mutates and reuses the
+      // same row object across calls (no clone-on-save, unlike a real DB round-trip),
+      // so holding onto `firstOut.attendance` itself would observe the second
+      // punch-out's mutation too.
+      const firstPunchOutMs = (firstOut.attendance!.punchOut as Date).getTime();
+
+      // Advance the clock so the two punch-outs cannot land in the same millisecond.
+      jest.setSystemTime(new Date('2026-07-01T06:00:00Z'));
+      await service.punchIn('doctor-1', {});
+      const secondOut = await service.punchOut('doctor-1', {});
+      const secondPunchOutMs = (secondOut.attendance!.punchOut as Date).getTime();
+
+      expect(secondPunchOutMs).toBeGreaterThan(firstPunchOutMs);
+      expect(attendanceRepo.data()).toHaveLength(1);
+      jest.useRealTimers();
+    });
+
+    const fakeConfig = (timeZone: string) =>
+      ({ get: (key: string) => (key === 'clinic.timeZone' ? timeZone : undefined) }) as any;
+
+    it('a new clinic day starts a new row, not a reopen of yesterday\'s', async () => {
+      const attendanceRepo = makeRepo();
+      const service = new AttendanceService(
+        attendanceRepo as any,
+        makeRepo() as any,
+        makeRepo() as any,
+        fakeAudit,
+        fakeConfig('Asia/Kolkata'),
+      );
+
+      // Day 1, 10:00 IST.
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-01T04:30:00Z'));
+      const day1 = await service.punchIn('doctor-1', {});
+      await service.punchOut('doctor-1', {});
+
+      // Day 2, 10:00 IST.
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-02T04:30:00Z'));
+      const day2 = await service.punchIn('doctor-1', {});
+
+      expect(day2.attendance.id).not.toBe(day1.attendance.id);
+      expect(attendanceRepo.data()).toHaveLength(2);
+      jest.useRealTimers();
+    });
+
+    it('the clinic-day boundary is clinic-local: 23:00 IST and 01:00 IST are different days despite sharing a UTC day', async () => {
+      const attendanceRepo = makeRepo();
+      const service = new AttendanceService(
+        attendanceRepo as any,
+        makeRepo() as any,
+        makeRepo() as any,
+        fakeAudit,
+        fakeConfig('Asia/Kolkata'),
+      );
+
+      // 23:00 IST on 1 July == 17:30 UTC on 1 July.
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-01T17:30:00Z'));
+      const late = await service.punchIn('doctor-1', {});
+      await service.punchOut('doctor-1', {});
+
+      // 01:00 IST on 2 July == 19:30 UTC on 1 July - same UTC calendar day, but the
+      // clinic's next day. A server-local comparison would wrongly treat this as the
+      // same "day" as the punch above.
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-01T19:30:00Z'));
+      const early = await service.punchIn('doctor-1', {});
+
+      expect(early.attendance.id).not.toBe(late.attendance.id);
+      expect(attendanceRepo.data()).toHaveLength(2);
+      jest.useRealTimers();
+    });
   });
 
   it('today() status agrees with its own records (ACTIVE only while a punch is open)', async () => {

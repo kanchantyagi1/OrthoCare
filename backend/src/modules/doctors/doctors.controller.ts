@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -18,8 +18,8 @@ export class DoctorsController {
   // privilege-escalation path, and the previous code allowed exactly that.
   @Roles(Role.ADMIN, Role.DOCTOR)
   @Get()
-  findAll() {
-    return this.doctors.listForAdmin();
+  findAll(@Query('includeInactive') includeInactive?: string) {
+    return this.doctors.listForAdmin(includeInactive === 'true' || includeInactive === '1');
   }
 
   @Roles(Role.ADMIN)
