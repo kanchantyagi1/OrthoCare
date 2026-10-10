@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../../auth/auth_controller.dart';
 import '../admin_controller.dart';
+import 'admin_escalations_screen.dart' show EscalationDashboardFilter;
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -36,12 +37,36 @@ class AdminDashboardScreen extends ConsumerWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.6,
                 children: [
-                  _StatCard(label: 'Active Doctors', value: s.activeDoctors),
+                  // "Active Doctors" literally counts currently-open attendance
+                  // rows (dashboard.service.ts), so Attendance is the screen
+                  // that number actually comes from - not Doctor Management,
+                  // whose "active" means "not removed", a different concept.
+                  _StatCard(
+                    label: 'Active Doctors',
+                    value: s.activeDoctors,
+                    onTap: () => context.push('/admin/attendance'),
+                  ),
+                  // No admin chat-browser screen exists for these two, and
+                  // routing to something that doesn't show this data would be
+                  // misleading - left inert rather than guessing a destination.
                   _StatCard(label: 'Patient Chats', value: s.patientChats),
                   _StatCard(label: 'Resolved Instantly', value: s.resolvedByAssistant),
-                  _StatCard(label: 'Human Escalations', value: s.humanEscalations),
-                  _StatCard(label: 'Pending', value: s.pending),
-                  _StatCard(label: 'Urgent', value: s.urgent, highlight: true),
+                  _StatCard(
+                    label: 'Human Escalations',
+                    value: s.humanEscalations,
+                    onTap: () => context.push('/admin/escalations', extra: EscalationDashboardFilter.today),
+                  ),
+                  _StatCard(
+                    label: 'Pending',
+                    value: s.pending,
+                    onTap: () => context.push('/admin/escalations', extra: EscalationDashboardFilter.pending),
+                  ),
+                  _StatCard(
+                    label: 'Urgent',
+                    value: s.urgent,
+                    highlight: true,
+                    onTap: () => context.push('/admin/escalations', extra: EscalationDashboardFilter.urgent),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -84,24 +109,35 @@ class _StatCard extends StatelessWidget {
   final String label;
   final int value;
   final bool highlight;
-  const _StatCard({required this.label, required this.value, this.highlight = false});
+  final VoidCallback? onTap;
+  const _StatCard({required this.label, required this.value, this.highlight = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final content = Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$value', style: Theme.of(context).textTheme.headlineMedium),
+              // The only visual cue that a card is tappable - an inert card
+              // must not look interactive, so this is omitted when onTap is null.
+              if (onTap != null) Icon(Icons.chevron_right, size: 18, color: scheme.outline),
+            ],
+          ),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
     return Card(
       color: highlight ? scheme.errorContainer : null,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('$value', style: Theme.of(context).textTheme.headlineMedium),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
   }
 }

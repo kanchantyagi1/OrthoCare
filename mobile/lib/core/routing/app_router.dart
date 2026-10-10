@@ -131,7 +131,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/admin/doctors', builder: (context, state) => const DoctorManagementScreen()),
       GoRoute(path: '/admin/shifts', builder: (context, state) => const ShiftManagementScreen()),
       GoRoute(path: '/admin/attendance', builder: (context, state) => const AttendanceScreen()),
-      GoRoute(path: '/admin/escalations', builder: (context, state) => const AdminEscalationsScreen()),
+      GoRoute(
+        path: '/admin/escalations',
+        // `extra` carries the optional dashboard-card filter (see
+        // AdminEscalationsScreen) - not deep-linkable, but this is an
+        // internal tap-through from the dashboard, not a shareable URL.
+        builder: (context, state) => AdminEscalationsScreen(filter: state.extra as EscalationDashboardFilter?),
+      ),
       GoRoute(path: '/admin/knowledge', builder: (context, state) => const KnowledgeBaseScreen()),
     ],
   );

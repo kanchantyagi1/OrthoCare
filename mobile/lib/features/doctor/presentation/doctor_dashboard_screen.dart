@@ -69,11 +69,35 @@ class DoctorDashboardScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(child: _StatCard(label: 'New', value: data.newCases, color: AppTheme.urgent)),
+                    // All three open the one case list this doctor has (grouped
+                    // into "my cases" + the unassigned queue) - there is no
+                    // separate filtered view to send New/Pending/Resolved to.
+                    Expanded(
+                      child: _StatCard(
+                        label: 'New',
+                        value: data.newCases,
+                        color: AppTheme.urgent,
+                        onTap: () => context.push('/doctor/escalations'),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _StatCard(label: 'Pending', value: data.pending, color: AppTheme.high)),
+                    Expanded(
+                      child: _StatCard(
+                        label: 'Pending',
+                        value: data.pending,
+                        color: AppTheme.high,
+                        onTap: () => context.push('/doctor/escalations'),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _StatCard(label: 'Resolved', value: data.resolved, color: Colors.green)),
+                    Expanded(
+                      child: _StatCard(
+                        label: 'Resolved',
+                        value: data.resolved,
+                        color: Colors.green,
+                        onTap: () => context.push('/doctor/escalations'),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -161,21 +185,24 @@ class _StatCard extends StatelessWidget {
   final String label;
   final int value;
   final Color color;
-  const _StatCard({required this.label, required this.value, required this.color});
+  final VoidCallback? onTap;
+  const _StatCard({required this.label, required this.value, required this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          children: [
-            Text('$value', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 4),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        children: [
+          Text('$value', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 4),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
       ),
+    );
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
   }
 }

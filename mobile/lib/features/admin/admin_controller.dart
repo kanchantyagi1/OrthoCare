@@ -15,9 +15,13 @@ final adminDashboardProvider = FutureProvider.autoDispose<AdminDashboardStats>((
   return AdminDashboardStats.fromJson(data);
 });
 
-final doctorsProvider = FutureProvider.autoDispose<List<DoctorSummary>>((ref) async {
+// `includeInactive`: the backend excludes removed (deactivated) doctors by
+// default, so Doctor Management asks for them explicitly to offer a "show
+// removed" view; every other consumer (e.g. the shift picker) uses `false`
+// and so only ever sees doctors who can actually be assigned work.
+final doctorsProvider = FutureProvider.autoDispose.family<List<DoctorSummary>, bool>((ref, includeInactive) async {
   final api = ref.watch(apiClientProvider);
-  final data = await api.get('/doctors');
+  final data = await api.get('/doctors', query: includeInactive ? {'includeInactive': 'true'} : null);
   final items = data['items'] as List<dynamic>? ?? (data['data'] as List<dynamic>? ?? []);
   return items.map((e) => DoctorSummary.fromJson(e as Map<String, dynamic>)).toList();
 });

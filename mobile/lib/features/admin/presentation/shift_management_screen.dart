@@ -11,7 +11,9 @@ class ShiftManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shifts = ref.watch(shiftsProvider);
-    final doctors = ref.watch(doctorsProvider);
+    // Only active doctors can be assigned a shift - a removed doctor must not
+    // appear in this picker even though they may still own old shift rows.
+    final doctors = ref.watch(doctorsProvider(false));
     return Scaffold(
       appBar: AppBar(title: const Text('Shift Management')),
       floatingActionButton: FloatingActionButton(
