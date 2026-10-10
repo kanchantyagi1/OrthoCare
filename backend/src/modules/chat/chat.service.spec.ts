@@ -1,6 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
 import { AiConfidence, EscalationPriority } from '../../common/enums/escalation.enum';
+import { ENGLISH_GREETING, HINDI_GREETING } from './greeting';
+import { SAFE_ESCALATION_MESSAGE } from '../ai/system-prompt';
 
 function fakeMessageRepo() {
   const rows: any[] = [];
@@ -141,5 +143,92 @@ describe('ChatService', () => {
 
     await service.submitFeedback('patient-1', 'msg-1', false);
     expect(escalations.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChatService greetings', () => {
+  function buildService(aiAnswer: any) {
+    const sessionRepo = {
+      findOne: jest.fn(async () => ({ id: 'session-1', patientId: 'patient-1' })),
+      save: jest.fn(async (s: any) => s),
+    };
+    const messageRepo = fakeMessageRepo();
+    const knowledge = { retrieveRelevantChunks: jest.fn(async () => []) };
+    const ai = { embed: jest.fn(async () => [0.1]), answerQuestion: jest.fn(async () => aiAnswer) };
+    const redFlags = { matchPriority: jest.fn(async () => null) };
+    const escalations = { create: jest.fn(async (_input: any) => ({})) };
+    const patients = { findOne: jest.fn(async () => ({ id: 'patient-1' })) };
+    const audit = { record: jest.fn() };
+    const service = new ChatService(
+      sessionRepo as any,
+      messageRepo as any,
+      knowledge as any,
+      ai as any,
+      redFlags as any,
+      escalations as any,
+      patients as any,
+      audit as any,
+      mockConfig(),
+    );
+    return { service, messageRepo, knowledge, ai, redFlags, escalations };
+  }
+
+  it.each([
+    ['Hi', ENGLISH_GREETING],
+    ['  HELLO  ', ENGLISH_GREETING],
+    ['hey', ENGLISH_GREETING],
+    ['Namaste', HINDI_GREETING],
+  ])('replies to "%s" without retrieval, the model, or an escalation', async (text, expected) => {
+    const { service, knowledge, ai, redFlags, escalations } = buildService(undefined);
+
+    const { patientMessage, assistantMessage } = await service.sendMessage('patient-1', 'session-1', text);
+
+    expect(patientMessage.message).toBe(text);
+    expect(assistantMessage.role).toBe('assistant');
+    expect(assistantMessage.message).toBe(expected);
+    expect(assistantMessage.confidence).toBe(AiConfidence.SUPPORTED);
+    expect(assistantMessage.needsHuman).toBe(false);
+    expect(ai.embed).not.toHaveBeenCalled();
+    expect(ai.answerQuestion).not.toHaveBeenCalled();
+    expect(knowledge.retrieveRelevantChunks).not.toHaveBeenCalled();
+    expect(redFlags.matchPriority).not.toHaveBeenCalled();
+    expect(escalations.create).not.toHaveBeenCalled();
+  });
+
+  it('sends a greeting with a medical question through the normal pipeline, escalation included', async () => {
+    const { service, knowledge, ai, redFlags, escalations } = buildService({
+      answer: 'cannot answer',
+      confidence: AiConfidence.INSUFFICIENT_CONTEXT,
+      needsHuman: true,
+      priority: EscalationPriority.NORMAL,
+      reason: 'no_relevant_knowledge_chunks_retrieved',
+      sourceChunkIds: [],
+    });
+
+    const text = 'Hi, can I double my painkiller dose?';
+    const { assistantMessage } = await service.sendMessage('patient-1', 'session-1', text);
+
+    expect(ai.embed).toHaveBeenCalledWith(text);
+    expect(knowledge.retrieveRelevantChunks).toHaveBeenCalled();
+    expect(redFlags.matchPriority).toHaveBeenCalledWith(text);
+    expect(ai.answerQuestion).toHaveBeenCalledWith(expect.objectContaining({ question: text }));
+    expect(assistantMessage.message).toBe(SAFE_ESCALATION_MESSAGE);
+    expect(escalations.create).toHaveBeenCalledWith(expect.objectContaining({ question: text }));
+  });
+
+  it('answers a supported greeting-plus-question from the model, not with the canned greeting', async () => {
+    const { service, ai } = buildService({
+      answer: 'Per the clinic leaflet, walk with support from day 1.',
+      confidence: AiConfidence.SUPPORTED,
+      needsHuman: false,
+      priority: EscalationPriority.NORMAL,
+      reason: 'answered',
+      sourceChunkIds: [],
+    });
+
+    const { assistantMessage } = await service.sendMessage('patient-1', 'session-1', 'Namaste, can I walk after surgery?');
+
+    expect(ai.answerQuestion).toHaveBeenCalled();
+    expect(assistantMessage.message).toBe('Per the clinic leaflet, walk with support from day 1.');
   });
 });

@@ -14,6 +14,8 @@ import { AuditEvent } from '../../common/enums/audit-event.enum';
 import { AiConfidence, EscalationPriority } from '../../common/enums/escalation.enum';
 import { SAFE_ESCALATION_MESSAGE } from '../ai/system-prompt';
 import { toChatSessionListItem } from './chat.mapper';
+import { greetingReply } from './greeting';
+import { RetrievedChunk, StructuredAiAnswer } from '../ai/interfaces/ai-response.interface';
 import { DEFAULT_CLINIC_TIMEZONE, clinicStartOfDay } from '../../common/util/clinic-time';
 
 const PRIORITY_RANK: Record<EscalationPriority, number> = {
@@ -135,29 +137,42 @@ export class ChatService {
       this.messageRepo.create({ sessionId, role: 'patient', message: messageText }),
     );
 
-    const history = await this.messageRepo.find({
-      where: { sessionId },
-      order: { createdAt: 'DESC' },
-      take: 10,
-    });
+    // A bare greeting ("Hi", "Namaste") has nothing to look up: answering it here
+    // skips retrieval and the model, which would otherwise find no approved
+    // context and escalate a "Hi" to the clinic team. Anything more than a
+    // greeting still takes the full pipeline below.
+    const greeting = greetingReply(messageText);
+    let retrievedChunks: RetrievedChunk[] = [];
+    let redFlagPriority: EscalationPriority | null = null;
+    let aiAnswer: StructuredAiAnswer;
 
-    const queryEmbedding = await this.ai.embed(messageText);
-    const retrievedChunks = await this.knowledge.retrieveRelevantChunks({
-      queryEmbedding,
-      topK: this.config.get<number>('rag.topK', 5),
-      similarityThreshold: this.config.get<number>('rag.similarityThreshold', 0.72),
-      surgeryType: patient?.surgeryType,
-    });
+    if (greeting) {
+      aiAnswer = greeting;
+    } else {
+      const history = await this.messageRepo.find({
+        where: { sessionId },
+        order: { createdAt: 'DESC' },
+        take: 10,
+      });
 
-    const redFlagPriority = await this.redFlags.matchPriority(messageText);
+      const queryEmbedding = await this.ai.embed(messageText);
+      retrievedChunks = await this.knowledge.retrieveRelevantChunks({
+        queryEmbedding,
+        topK: this.config.get<number>('rag.topK', 5),
+        similarityThreshold: this.config.get<number>('rag.similarityThreshold', 0.72),
+        surgeryType: patient?.surgeryType,
+      });
 
-    const aiAnswer = await this.ai.answerQuestion({
-      question: messageText,
-      retrievedChunks,
-      conversationHistory: history
-        .reverse()
-        .map((m) => ({ role: m.role, message: m.message })),
-    });
+      redFlagPriority = await this.redFlags.matchPriority(messageText);
+
+      aiAnswer = await this.ai.answerQuestion({
+        question: messageText,
+        retrievedChunks,
+        conversationHistory: history
+          .reverse()
+          .map((m) => ({ role: m.role, message: m.message })),
+      });
+    }
 
     let finalPriority = aiAnswer.priority;
     let needsHuman = aiAnswer.needsHuman;
@@ -180,7 +195,11 @@ export class ChatService {
         reason,
         sourceChunkIds: aiAnswer.sourceChunkIds,
         similarityScores: retrievedChunks.map((c) => c.similarity),
-        model: this.config.get<boolean>('openai.mockMode') ? 'mock' : this.config.get<string>('openai.model'),
+        model: greeting
+          ? 'greeting'
+          : this.config.get<boolean>('openai.mockMode')
+            ? 'mock'
+            : this.config.get<string>('openai.model'),
       }),
     );
 
