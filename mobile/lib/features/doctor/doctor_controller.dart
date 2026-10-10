@@ -136,6 +136,13 @@ class EscalationActions {
   final Ref _ref;
   EscalationActions(this._ref);
 
+  /// Takes an unassigned WAITING_FOR_DOCTOR case for the signed-in doctor.
+  /// The backend refuses a case already held by someone else rather than
+  /// silently reassigning it, so a losing racer gets an error, not a surprise.
+  Future<void> claimEscalation(String escalationId) async {
+    await _ref.read(apiClientProvider).post('/escalations/$escalationId/claim');
+  }
+
   Future<void> markContacted(String escalationId) async {
     await _ref.read(apiClientProvider).post('/escalations/$escalationId/contact');
   }

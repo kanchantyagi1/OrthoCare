@@ -35,10 +35,25 @@ class DoctorManagementScreen extends ConsumerWidget {
                 return ListTile(
                   leading: CircleAvatar(child: Text(d.name.isNotEmpty ? d.name[0].toUpperCase() : '?')),
                   title: Text(d.name),
-                  subtitle: Text(d.phone),
-                  trailing: Chip(
-                    label: Text(d.active ? 'Active' : 'Inactive'),
-                    backgroundColor: d.active ? Colors.green.withValues(alpha: 0.15) : null,
+                  // Status sits here rather than in `trailing` so the actions menu
+                  // has room without risking an overflow on a narrow phone.
+                  subtitle: Text(
+                    '${d.phone}  •  ${d.active ? 'Active' : 'Inactive'}',
+                    style: d.active ? null : TextStyle(color: Theme.of(context).colorScheme.outline),
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    tooltip: 'Doctor actions',
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _showDoctorForm(context, ref, existing: d);
+                      } else if (value == 'remove') {
+                        _confirmRemove(context, ref, d);
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'remove', child: Text('Remove doctor')),
+                    ],
                   ),
                   onTap: () => _showDoctorForm(context, ref, existing: d),
                 );
@@ -48,6 +63,54 @@ class DoctorManagementScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Removing a doctor *deactivates* them rather than deleting the record:
+  /// attendance rows, case assignments and case notes reference the doctor and
+  /// must survive for audit. The wording below says so plainly instead of
+  /// implying the data is erased.
+  Future<void> _confirmRemove(BuildContext context, WidgetRef ref, DoctorSummary doctor) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Remove ${doctor.name}?'),
+        content: const Text(
+          'They will be deactivated: no new cases will be assigned to them and '
+          'they will no longer be able to sign in.\n\n'
+          'Their attendance history and past cases are kept for the record, and '
+          'you can re-activate them later by editing their details.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          // Closing the dialog before the request runs means the button is gone
+          // by then, so a double-tap cannot fire two removals.
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(adminActionsProvider).deleteDoctor(doctor.id);
+      ref.invalidate(doctorsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${doctor.name} removed.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not remove ${doctor.name}. $e')),
+        );
+      }
+    }
   }
 
   void _showDoctorForm(BuildContext context, WidgetRef ref, {DoctorSummary? existing}) {

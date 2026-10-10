@@ -95,8 +95,8 @@ The app calls Firebase (`firebase_core`, `firebase_messaging`) for FCM push, but
 3. Dashboard (`/doctor/dashboard`) — today's shift, ACTIVE/OFFLINE punch state, new/pending/resolved counts, average response time.
 4. Shift (`/doctor/shift`).
 5. Punch In/Out — action on the dashboard, idempotent against double-tap.
-6. Escalations list (`/doctor/escalations`) — urgent cases sorted first.
-7. Escalation detail (`/doctor/escalations/:id`) — patient info, conversation, source documents, Call Patient / Mark Contacted / Resolve (full resolution form) / Escalate to Senior.
+6. Escalations list (`/doctor/escalations`) — two groups, urgent first within each: **Waiting for a doctor** (unassigned, each with a **Claim** action) above **My cases**. The API returns this doctor's own cases *plus* cases still waiting for any doctor, because an unassigned case used to be invisible to every doctor — a question asked outside shift hours sat unanswered while the patient's screen showed it pending.
+7. Escalation detail (`/doctor/escalations/:id`) — patient info (including the callable phone number), conversation and source documents. The action row depends on who holds the case, because the server only accepts updates from the assigned doctor: **unassigned** offers **Claim case** (after which Mark Contacted / Resolve / Escalate unlock in place, no need to back out); **assigned to you** offers Call Patient / Mark Contacted / Resolve / Escalate to Senior; **assigned to another doctor** is read-only and names the holder. Call Patient is available in every state. Ownership is derived from the case list, since `GET /escalations` returns only this doctor's own assigned cases plus the unassigned queue and the API never exposes the caller's doctor id.
 8. Profile (`/doctor/profile`) — also the entry point to Change Password.
 
 **Patient**
@@ -107,14 +107,14 @@ The app calls Firebase (`firebase_core`, `firebase_messaging`) for FCM push, but
 
 **Admin** (folded into this app, not a separate web dashboard)
 13. Dashboard (`/admin/dashboard`) — Active Doctors / Patient Chats / Resolved Instantly / Human Escalations / Pending / Urgent cards, plus a Doctor Performance table.
-14. Doctor Management (`/admin/doctors`) — list/add/edit doctors.
+14. Doctor Management (`/admin/doctors`) — list/add/edit doctors, plus **Remove doctor** via the per-row actions menu. Removal *deactivates* (the backend keeps the record so attendance, case assignments and case notes survive for audit); the confirmation dialog says so, and an admin can re-activate by editing.
 15. Shift Management (`/admin/shifts`) — list/add/delete shifts per doctor.
 16. Attendance (`/admin/attendance`) — punch-in/out report table.
 17. Escalations (`/admin/escalations`) — all cases across all doctors; tapping one reuses the doctor Escalation Detail screen (server-side role check applies).
 18. Document Knowledge Base (`/admin/knowledge`) — upload PDF/DOCX, status per document (Uploading → Processing → Ready/Active/Failed), Activate/Archive/Reprocess/Delete.
 
 **Shared (staff)**
-19. Change Password (`/change-password`) — current + new password; how staff move off the temporary password. Reachable from the doctor Profile screen, and gated to signed-in staff (an account-less patient session is redirected away).
+19. Change Password (`/change-password`) — current + new password; how staff move off the temporary password. Reachable from the doctor Profile screen **and from the admin drawer's Account section** (admins never see the doctor Profile screen, so previously a new admin on the temporary password had no in-app way to change it). Gated to signed-in staff — an account-less patient session is redirected away.
 
 ## REST contract
 
@@ -125,7 +125,8 @@ Beyond the spec's original endpoint list, these are also consumed:
 - `GET /doctors`, `POST /doctors`, `PUT /doctors/:id`, `DELETE /doctors/:id` — Doctor Management
 - `GET /dashboard/doctor` — a doctor-scoped variant of the admin `/dashboard` stats (today's shift, attendance, new/pending/resolved counts, average response time), consumed by the Doctor Dashboard
 - `POST /auth/change-password` — `{currentPassword, newPassword}`, JWT-required, used by the Change Password screen
-- `GET /escalations` is role-scoped server-side: staff by JWT, patients by `?sessionId=`
+- `GET /escalations` is role-scoped server-side: staff by JWT, patients by `?sessionId=`. For a doctor it returns their assigned cases **and** unassigned `WAITING_FOR_DOCTOR` cases; the two are told apart by `status` / `assignedDoctorId`.
+- `POST /escalations/:id/claim` — a doctor takes an unassigned case. The backend refuses a case already held by someone else rather than reassigning it, so the UI treats a 400/404/409 as "Already claimed by another doctor" and refreshes.
 
 Field names follow the backend contract exactly — `doctorId` / `doctorName` / `assignedDoctorId` / `assignedDoctorName` / `activeDoctors` / `resolvedByAssistant` / `doctorPerformance`. The JSON key `aiResponse` is deliberately left as-is: it is never shown to a user, and renaming it would break the contract for no benefit.
 

@@ -134,6 +134,21 @@ class _AdminDrawer extends StatelessWidget {
             item(Icons.fingerprint, 'Attendance', '/admin/attendance'),
             item(Icons.support_agent_outlined, 'Escalations', '/admin/escalations'),
             item(Icons.menu_book_outlined, 'Knowledge Base', '/admin/knowledge'),
+            const Divider(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                'ACCOUNT',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            // Admins never see the doctor Profile screen, which was previously
+            // the only route to this - so a new admin on the temporary password
+            // had no way to change it in-app.
+            item(Icons.lock_reset_outlined, 'Change password', '/change-password'),
           ],
         ),
       ),
