@@ -1,4 +1,4 @@
-package com.orthocare.ai.orthocare_ai
+package com.primeortho.dev
 
 import io.flutter.embedding.android.FlutterActivity
 

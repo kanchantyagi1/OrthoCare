@@ -18,6 +18,11 @@ on:
         description: "Backend API base URL to bake into this build"
         required: false
         default: "http://100.59.151.247:8081"
+      build_apk:
+        description: "Also build the debug/sideload APK (off by default - AAB only, for Play Console)"
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build:
@@ -72,7 +77,10 @@ jobs:
             echo "No release keystore secrets configured - building with Flutter's default debug signing."
           fi
 
-      - name: Build release APK
+      # Off by default: Play Console only ever needs the AAB. Run manually from the
+      # Actions tab with build_apk=true when a sideloadable APK is actually needed.
+      - name: Build release APK (optional)
+        if: github.event.inputs.build_apk == 'true'
         run: |
           flutter build apk --release \
             --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
@@ -83,15 +91,16 @@ jobs:
             --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
 
       - name: Upload APK artifact
+        if: github.event.inputs.build_apk == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: orthocare-ai-release-apk
+          name: prime-ortho-release-apk
           path: mobile/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: orthocare-ai-release-aab
+          name: prime-ortho-release-aab
           path: mobile/build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
