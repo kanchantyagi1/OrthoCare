@@ -54,7 +54,7 @@ export class OneAttendanceRowPerDoctorPerDay1736000000000 implements MigrationIn
     if (!(await hasTable('attendance'))) return;
 
     // Snapshot the collapse groups into a temp table first, rather than recomputing
-    // the same CTE in both the UPDATE and the DELETE below: keep_id selection only
+    // the same CTE in both the DELETE and the UPDATE below: keep_id selection only
     // depends on doctor_id/punch_in, which neither statement touches, so recomputing
     // would in fact be safe too - but a fixed snapshot removes any doubt on
     // production data this migration only gets to run once against.
@@ -70,16 +70,16 @@ export class OneAttendanceRowPerDoctorPerDay1736000000000 implements MigrationIn
       GROUP BY doctor_id, (punch_in AT TIME ZONE '${tz}')::date
     `);
 
-    // Fold the collapsed punch_out (NULL if any row in the day was still open) onto
-    // the kept row. kept_punch_in is already that row's own punch_in by construction
-    // (it was chosen as the MIN), so punch_in itself needs no update.
-    await queryRunner.query(`
-      UPDATE attendance a
-      SET punch_out = g.kept_punch_out
-      FROM _attendance_day_groups g
-      WHERE a.id = g.keep_id
-    `);
-
+    // Delete the duplicate rows BEFORE updating the kept row's punch_out. Order
+    // matters: pre-existing data can have at most one open (punch_out IS NULL) row
+    // per doctor at any time (uq_attendance_open_punch already enforces that), but
+    // within a day-group that one open row is not always the row MIN(punch_in)
+    // picked as keep_id. Updating the kept row to NULL first - while that day's
+    // real open row still exists, not yet deleted - would transiently put two
+    // punch_out IS NULL rows on the table for the same doctor and trip that
+    // constraint. Deleting the extras first removes that competing open row before
+    // the kept row's punch_out is ever touched, so only one row per doctor can be
+    // open at any point during this migration, exactly as before it ran.
     const collapsed = await queryRunner.query(`
       DELETE FROM attendance a
       USING _attendance_day_groups g
@@ -91,6 +91,16 @@ export class OneAttendanceRowPerDoctorPerDay1736000000000 implements MigrationIn
     console.log(
       `[OneAttendanceRowPerDoctorPerDay] collapsed ${collapsed.length} duplicate same-day attendance row(s)`,
     );
+
+    // Fold the collapsed punch_out (NULL if any row in the day was still open) onto
+    // the kept row. kept_punch_in is already that row's own punch_in by construction
+    // (it was chosen as the MIN), so punch_in itself needs no update.
+    await queryRunner.query(`
+      UPDATE attendance a
+      SET punch_out = g.kept_punch_out
+      FROM _attendance_day_groups g
+      WHERE a.id = g.keep_id
+    `);
 
     await queryRunner.query(`DROP TABLE _attendance_day_groups`);
 
