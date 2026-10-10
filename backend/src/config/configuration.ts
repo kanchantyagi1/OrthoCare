@@ -1,3 +1,5 @@
+import { DEFAULT_CLINIC_TIMEZONE } from '../common/util/clinic-time';
+
 function isPlaceholder(value: string | undefined): boolean {
   if (!value) return true;
   const v = value.trim().toLowerCase();
@@ -32,6 +34,13 @@ export default () => ({
     clientEmail: process.env.FCM_CLIENT_EMAIL,
     privateKey: process.env.FCM_PRIVATE_KEY,
     mockMode: isPlaceholder(process.env.FCM_PROJECT_ID),
+  },
+
+  clinic: {
+    // Shifts are wall-clock "HH:mm" in the clinic's own day, but the server runs in
+    // UTC. Without this, a 07:00-12:00 shift was evaluated against the UTC clock and
+    // so was only "active" 12:30-17:30 IST, leaving every escalation unassigned.
+    timeZone: process.env.CLINIC_TIMEZONE || DEFAULT_CLINIC_TIMEZONE,
   },
 
   retention: {

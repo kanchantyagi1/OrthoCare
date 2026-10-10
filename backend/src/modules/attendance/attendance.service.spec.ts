@@ -134,39 +134,80 @@ describe('AttendanceService', () => {
     expect((await service.today('doctor-1')).status).toBe('OFFLINE');
   });
 
-  it('getCurrentAvailableDoctor only returns a doctor who is punched in AND within an active shift window', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-01-01T10:00:00'));
+  /**
+   * These pin the timezone bug that left every escalation unassigned: shift windows
+   * are clinic wall-clock, but the code read the SERVER's clock, and the deployed host
+   * runs UTC. A 07:00-12:00 IST shift was therefore only "active" 07:00-12:00 UTC.
+   *
+   * Written against a fixed UTC instant and an explicitly configured clinic zone, so
+   * they do not depend on the machine's own timezone - the previous versions used a
+   * local-time literal and so passed on an IST laptop whichever clock the code read.
+   */
+  describe('getCurrentAvailableDoctor shift windows (clinic timezone)', () => {
+    // 03:30Z == 09:00 IST, which is inside a 07:00-12:00 clinic shift but outside it
+    // when the same instant is read as UTC.
+    const DURING_IST_SHIFT = new Date('2026-07-01T03:30:00Z');
 
-    const attendanceRepo = makeRepo([
-      { id: 'att-1', doctorId: 'doctor-1', punchIn: new Date('2026-01-01T09:00:00'), punchOut: null },
-    ]);
-    const doctorRepo = makeRepo([{ id: 'doctor-1', isActive: true, userId: 'user-1' }]);
-    const shiftRepo = makeRepo([
-      { id: 'shift-1', doctorId: 'doctor-1', startTime: '09:00', endTime: '12:00', isActive: true },
-    ]);
-    const service = new AttendanceService(attendanceRepo as any, doctorRepo as any, shiftRepo as any, fakeAudit);
+    const fakeConfig = (timeZone: string) =>
+      ({ get: (key: string) => (key === 'clinic.timeZone' ? timeZone : undefined) }) as any;
 
-    const doctor = await service.getCurrentAvailableDoctor();
-    expect(doctor?.id).toBe('doctor-1');
+    function serviceFor(timeZone: string) {
+      const attendanceRepo = makeRepo([
+        { id: 'att-1', doctorId: 'doctor-1', punchIn: new Date('2026-07-01T03:00:00Z'), punchOut: null },
+      ]);
+      const doctorRepo = makeRepo([{ id: 'doctor-1', isActive: true, userId: 'user-1' }]);
+      const shiftRepo = makeRepo([
+        { id: 'shift-1', doctorId: 'doctor-1', startTime: '07:00', endTime: '12:00', isActive: true },
+      ]);
+      return new AttendanceService(
+        attendanceRepo as any,
+        doctorRepo as any,
+        shiftRepo as any,
+        fakeAudit,
+        fakeConfig(timeZone),
+      );
+    }
 
-    jest.useRealTimers();
-  });
+    afterEach(() => jest.useRealTimers());
 
-  it('getCurrentAvailableDoctor returns null when the punched-in doctor has no active shift right now', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-01-01T20:00:00'));
+    it('finds the doctor when it is 09:00 in the CLINIC zone, even though the clock reads 03:30 UTC', async () => {
+      jest.useFakeTimers().setSystemTime(DURING_IST_SHIFT);
+      expect((await serviceFor('Asia/Kolkata').getCurrentAvailableDoctor())?.id).toBe('doctor-1');
+    });
 
-    const attendanceRepo = makeRepo([
-      { id: 'att-1', doctorId: 'doctor-1', punchIn: new Date('2026-01-01T09:00:00'), punchOut: null },
-    ]);
-    const doctorRepo = makeRepo([{ id: 'doctor-1', isActive: true, userId: 'user-1' }]);
-    const shiftRepo = makeRepo([
-      { id: 'shift-1', doctorId: 'doctor-1', startTime: '09:00', endTime: '12:00', isActive: true },
-    ]);
-    const service = new AttendanceService(attendanceRepo as any, doctorRepo as any, shiftRepo as any, fakeAudit);
+    it('finds nobody for the SAME instant when the clinic is in UTC, proving the zone is what decides', async () => {
+      jest.useFakeTimers().setSystemTime(DURING_IST_SHIFT);
+      // Same clock, same shift, same punch-in - only the configured zone differs, so a
+      // difference here can only come from the conversion, not from the host clock.
+      expect(await serviceFor('UTC').getCurrentAvailableDoctor()).toBeNull();
+    });
 
-    const doctor = await service.getCurrentAvailableDoctor();
-    expect(doctor).toBeNull();
+    it('returns null at 02:00 clinic time, outside the 07:00-12:00 window', async () => {
+      // 20:30Z == 02:00 IST the next day.
+      jest.useFakeTimers().setSystemTime(new Date('2026-06-30T20:30:00Z'));
+      expect(await serviceFor('Asia/Kolkata').getCurrentAvailableDoctor()).toBeNull();
+    });
 
-    jest.useRealTimers();
+    it('still requires a punch-in, not just an active shift', async () => {
+      jest.useFakeTimers().setSystemTime(DURING_IST_SHIFT);
+      const attendanceRepo = makeRepo([
+        {
+          id: 'att-1',
+          doctorId: 'doctor-1',
+          punchIn: new Date('2026-07-01T02:00:00Z'),
+          punchOut: new Date('2026-07-01T03:00:00Z'),
+        },
+      ]);
+      const service = new AttendanceService(
+        attendanceRepo as any,
+        makeRepo([{ id: 'doctor-1', isActive: true, userId: 'user-1' }]) as any,
+        makeRepo([
+          { id: 'shift-1', doctorId: 'doctor-1', startTime: '07:00', endTime: '12:00', isActive: true },
+        ]) as any,
+        fakeAudit,
+        fakeConfig('Asia/Kolkata'),
+      );
+      expect(await service.getCurrentAvailableDoctor()).toBeNull();
+    });
   });
 });

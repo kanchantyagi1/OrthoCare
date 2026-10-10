@@ -14,6 +14,7 @@ import { AuditEvent } from '../../common/enums/audit-event.enum';
 import { AiConfidence, EscalationPriority } from '../../common/enums/escalation.enum';
 import { SAFE_ESCALATION_MESSAGE } from '../ai/system-prompt';
 import { toChatSessionListItem } from './chat.mapper';
+import { DEFAULT_CLINIC_TIMEZONE, clinicStartOfDay } from '../../common/util/clinic-time';
 
 const PRIORITY_RANK: Record<EscalationPriority, number> = {
   [EscalationPriority.NORMAL]: 0,
@@ -83,8 +84,11 @@ export class ChatService {
    */
   async assertDailyQuotaRemaining(patientId: string) {
     const cap = this.config.get<number>('patientLimits.dailyMessageCap', 40);
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    // The cap resets at the clinic's midnight, not the server's - otherwise an
+    // IST clinic's allowance would roll over at 05:30 local.
+    const startOfDay = clinicStartOfDay(
+      this.config.get<string>('clinic.timeZone') || DEFAULT_CLINIC_TIMEZONE,
+    );
 
     const used = await this.messageRepo
       .createQueryBuilder('m')

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Escalation } from './entities/escalation.entity';
 import { DoctorCaseNote } from './entities/doctor-case-note.entity';
@@ -19,7 +19,7 @@ import { AuditModule } from '../audit/audit.module';
     // Chat/knowledge entities are registered here rather than importing ChatModule or
     // KnowledgeModule, which would be circular (ChatModule already imports this one).
     TypeOrmModule.forFeature([Escalation, DoctorCaseNote, ChatMessage, ChatSession, KnowledgeChunk]),
-    AttendanceModule,
+    forwardRef(() => AttendanceModule),
     NotificationsModule,
     UsersModule,
     DoctorsModule,

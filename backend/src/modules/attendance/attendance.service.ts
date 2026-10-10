@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
@@ -8,6 +9,12 @@ import { PunchInDto } from './dto/punch-in.dto';
 import { PunchOutDto } from './dto/punch-out.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditEvent } from '../../common/enums/audit-event.enum';
+import {
+  DEFAULT_CLINIC_TIMEZONE,
+  clinicMinutesOfDay,
+  clinicStartOfDay,
+  isWithinShiftWindow,
+} from '../../common/util/clinic-time';
 
 @Injectable()
 export class AttendanceService {
@@ -16,7 +23,12 @@ export class AttendanceService {
     @InjectRepository(Doctor) private readonly doctorRepo: Repository<Doctor>,
     @InjectRepository(Shift) private readonly shiftRepo: Repository<Shift>,
     private readonly audit: AuditService,
+    private readonly config?: ConfigService,
   ) {}
+
+  private get clinicTimeZone(): string {
+    return this.config?.get<string>('clinic.timeZone') || DEFAULT_CLINIC_TIMEZONE;
+  }
 
   /**
    * The open (not yet punched-out) attendance row, or null.
@@ -76,8 +88,10 @@ export class AttendanceService {
   }
 
   async today(doctorId: string) {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    // "Today" is the clinic's day, not the server's: with the host in UTC, a 09:00 IST
+    // punch-in sits before the UTC midnight boundary only after 05:30 IST, so an early
+    // shift's records would have been reported under the wrong day.
+    const startOfDay = clinicStartOfDay(this.clinicTimeZone);
 
     const open = await this.findOpenAttendance(doctorId);
     const records = await this.attendanceRepo
@@ -96,7 +110,7 @@ export class AttendanceService {
    * (4) has not punched out, and (5) is active. Returns null (WAITING_FOR_DOCTOR) if none.
    */
   async getCurrentAvailableDoctor(): Promise<Doctor | null> {
-    const nowMinutes = this.currentMinutesOfDay();
+    const nowMinutes = clinicMinutesOfDay(this.clinicTimeZone);
 
     const openAttendance = await this.attendanceRepo
       .createQueryBuilder('a')
@@ -111,7 +125,7 @@ export class AttendanceService {
         where: { doctorId: attendance.doctorId, isActive: true },
       });
       const hasActiveShiftNow = shifts.some((shift) =>
-        this.isWithinShiftWindow(nowMinutes, shift.startTime, shift.endTime),
+        isWithinShiftWindow(nowMinutes, shift.startTime, shift.endTime),
       );
       if (hasActiveShiftNow) {
         return this.doctorRepo.findOne({ where: { id: attendance.doctorId } });
@@ -121,22 +135,4 @@ export class AttendanceService {
     return null;
   }
 
-  private currentMinutesOfDay(): number {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  }
-
-  private isWithinShiftWindow(nowMinutes: number, startTime: string, endTime: string): boolean {
-    const toMinutes = (t: string) => {
-      const [h, m] = t.split(':').map(Number);
-      return h * 60 + m;
-    };
-    const start = toMinutes(startTime);
-    const end = toMinutes(endTime);
-    if (start <= end) {
-      return nowMinutes >= start && nowMinutes <= end;
-    }
-    // Overnight shift (e.g. 22:00 - 06:00)
-    return nowMinutes >= start || nowMinutes <= end;
-  }
 }

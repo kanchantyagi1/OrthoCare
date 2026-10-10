@@ -1,6 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Escalation } from './entities/escalation.entity';
 import { DoctorCaseNote } from './entities/doctor-case-note.entity';
 import { EscalationPriority, EscalationStatus } from '../../common/enums/escalation.enum';
@@ -121,12 +121,111 @@ export class EscalationsService {
     return this.findOne(escalationId);
   }
 
-  async findAll(filter?: { status?: EscalationStatus; doctorId?: string; patientId?: string }) {
-    const where: any = {};
-    if (filter?.status) where.status = filter.status;
-    if (filter?.doctorId) where.assignedDoctorId = filter.doctorId;
-    if (filter?.patientId) where.patientId = filter.patientId;
-    return this.repo.find({ where, order: { createdAt: 'DESC' } });
+  /**
+   * `includeUnassignedQueue` is what a doctor's case list needs. Filtering purely on
+   * `assignedDoctorId` meant an escalation created while nobody was punched in
+   * (WAITING_FOR_DOCTOR, no assignee) was visible to NO doctor at all, while the
+   * patient's own screen still showed it pending - so those cases silently rotted.
+   * Doctors now also see the unassigned queue and can claim from it; the two groups
+   * stay distinguishable by `status`/`assignedDoctorId` on the existing view shape.
+   */
+  async findAll(filter?: {
+    status?: EscalationStatus;
+    doctorId?: string;
+    patientId?: string;
+    includeUnassignedQueue?: boolean;
+  }) {
+    const base: any = {};
+    if (filter?.status) base.status = filter.status;
+    if (filter?.patientId) base.patientId = filter.patientId;
+
+    if (!filter?.doctorId) {
+      return this.repo.find({ where: base, order: { createdAt: 'DESC' } });
+    }
+
+    const mine = { ...base, assignedDoctorId: filter.doctorId };
+    if (!filter.includeUnassignedQueue) {
+      return this.repo.find({ where: mine, order: { createdAt: 'DESC' } });
+    }
+
+    // An array of where-objects is an OR in TypeORM.
+    const waiting: any = {
+      ...base,
+      assignedDoctorId: IsNull(),
+      status: EscalationStatus.WAITING_FOR_DOCTOR,
+    };
+    // An explicit ?status= filter must not be widened by the queue clause.
+    if (filter.status && filter.status !== EscalationStatus.WAITING_FOR_DOCTOR) {
+      return this.repo.find({ where: mine, order: { createdAt: 'DESC' } });
+    }
+
+    return this.repo.find({ where: [mine, waiting], order: { createdAt: 'DESC' } });
+  }
+
+  /**
+   * Claims an unassigned case. The guard clauses live in the UPDATE's WHERE rather
+   * than in a read-then-write, so two doctors tapping Claim at the same instant
+   * cannot both win - the second one's UPDATE matches zero rows.
+   */
+  private async tryClaim(escalationId: string, doctorId: string): Promise<boolean> {
+    const result = await this.repo
+      .createQueryBuilder()
+      .update(Escalation)
+      .set({
+        assignedDoctorId: doctorId,
+        status: EscalationStatus.ASSIGNED,
+        assignedAt: new Date(),
+      })
+      .where('id = :id', { id: escalationId })
+      .andWhere('assigned_doctor_id IS NULL')
+      .andWhere('status = :waiting', { waiting: EscalationStatus.WAITING_FOR_DOCTOR })
+      .execute();
+
+    if (!result.affected) return false;
+
+    await this.audit.record(AuditEvent.ESCALATION_ASSIGNED, undefined, {
+      escalationId,
+      doctorId,
+      claimed: true,
+    });
+    return true;
+  }
+
+  async claim(escalationId: string, doctorId: string) {
+    if (await this.tryClaim(escalationId, doctorId)) {
+      return this.findOneView(escalationId);
+    }
+
+    // Either it does not exist, or somebody else already holds it.
+    const existing = await this.repo.findOne({ where: { id: escalationId } });
+    if (!existing) throw new NotFoundException('Escalation not found');
+    throw new ConflictException('This case has already been claimed');
+  }
+
+  /**
+   * Assigns every case still waiting for a doctor to the one who just punched in.
+   * Without this, a question asked outside shift hours stays unassigned forever,
+   * because assignment is only ever attempted at creation time.
+   */
+  async assignWaitingCasesTo(doctorId: string): Promise<number> {
+    const waiting = await this.repo.find({
+      where: { assignedDoctorId: IsNull(), status: EscalationStatus.WAITING_FOR_DOCTOR },
+      order: { createdAt: 'ASC' },
+      select: ['id'],
+    });
+    if (!waiting.length) return 0;
+
+    // tryClaim rather than claim(): no view building, and a case another doctor
+    // grabbed in the same instant is skipped instead of failing the punch-in.
+    let assigned = 0;
+    for (const { id } of waiting) {
+      if (await this.tryClaim(id, doctorId)) assigned++;
+    }
+
+    if (assigned) {
+      this.logger.log(`Assigned ${assigned} waiting case(s) to doctor ${doctorId} on punch-in`);
+    }
+    return assigned;
   }
 
   async findOne(id: string) {
@@ -140,6 +239,7 @@ export class EscalationsService {
     status?: EscalationStatus;
     doctorId?: string;
     patientId?: string;
+    includeUnassignedQueue?: boolean;
   }): Promise<EscalationView[]> {
     const escalations = await this.findAll(filter);
     return Promise.all(escalations.map((e) => this.toView(e)));

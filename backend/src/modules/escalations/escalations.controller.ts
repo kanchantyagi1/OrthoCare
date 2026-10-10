@@ -64,7 +64,14 @@ export class EscalationsController {
 
     if (user?.role === Role.DOCTOR) {
       const doctor = await this.doctors.findByUserIdOrThrow(user.id);
-      return this.escalations.findAllViews({ status, doctorId: doctor.id });
+      // Plus the unassigned WAITING_FOR_DOCTOR queue: cases raised while nobody was
+      // punched in belong to no doctor, and filtering on assignment alone hid them
+      // from everyone while the patient still saw them as pending.
+      return this.escalations.findAllViews({
+        status,
+        doctorId: doctor.id,
+        includeUnassignedQueue: true,
+      });
     }
     return this.escalations.findAllViews({ status });
   }
@@ -76,6 +83,15 @@ export class EscalationsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.escalations.findOneView(id);
+  }
+
+  /** Takes an unassigned case off the waiting queue. Conflicts if already claimed. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  @Post(':id/claim')
+  async claim(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    const doctor = await this.doctors.findByUserIdOrThrow(user.id);
+    return this.escalations.claim(id, doctor.id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

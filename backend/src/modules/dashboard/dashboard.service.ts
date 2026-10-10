@@ -9,11 +9,15 @@ import { Escalation } from '../escalations/entities/escalation.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { ChatSession } from '../chat/entities/chat-session.entity';
 import { EscalationPriority, EscalationStatus } from '../../common/enums/escalation.enum';
+import {
+  DEFAULT_CLINIC_TIMEZONE,
+  clinicHhMm,
+  clinicStartOfDay,
+} from '../../common/util/clinic-time';
 
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+/** Start of the CLINIC's day - see common/util/clinic-time. */
+function startOfToday(timeZone: string): Date {
+  return clinicStartOfDay(timeZone);
 }
 
 function avgMinutes(diffsMs: number[]): number | null {
@@ -34,19 +38,34 @@ export class DashboardService {
     private readonly config: ConfigService,
   ) {}
 
+  private get clinicTimeZone(): string {
+    return this.config?.get<string>('clinic.timeZone') || DEFAULT_CLINIC_TIMEZONE;
+  }
+
   /// Doctor-scoped counterpart to overview(), backing the doctor home screen
-  /// (spec section 31): today's shift, punch state, and this doctor's own caseload.
+  /// (spec section 31): today's shift, punch state, and the caseload this doctor can
+  /// act on - which includes the unassigned queue, not just cases already assigned to
+  /// her. Counting only assigned cases made the dashboard contradict the Cases screen
+  /// ("New: 0" while an unclaimed queue sat waiting), the same invisible-case problem
+  /// one screen over.
   async doctorOverview(doctorId: string) {
-    const [shifts, openAttendance, escalations] = await Promise.all([
+    const [shifts, openAttendance, escalations, unassigned] = await Promise.all([
       this.shiftRepo.find({ where: { doctorId, isActive: true } }),
       this.attendanceRepo.findOne({
         where: { doctorId, punchOut: IsNull() },
         order: { punchIn: 'DESC' },
       }),
       this.escalationRepo.find({ where: { assignedDoctorId: doctorId } }),
+      this.escalationRepo.find({
+        where: {
+          assignedDoctorId: IsNull(),
+          status: EscalationStatus.WAITING_FOR_DOCTOR,
+        },
+      }),
     ]);
 
-    const nowHhMm = new Date().toTimeString().slice(0, 5);
+    // Clinic wall-clock, not the server's: see common/util/clinic-time.
+    const nowHhMm = clinicHhMm(this.clinicTimeZone);
     // Shifts are daily HH:mm windows; a window whose end is <= its start wraps midnight.
     const todayShift =
       shifts.find((s) =>
@@ -55,7 +74,7 @@ export class DashboardService {
           : nowHhMm >= s.startTime || nowHhMm < s.endTime,
       ) ?? shifts[0] ?? null;
 
-    const since = startOfToday();
+    const since = startOfToday(this.clinicTimeZone);
     const responseTimes = escalations
       .filter((e) => e.contactedAt && e.assignedAt)
       .map((e) => e.contactedAt!.getTime() - e.assignedAt!.getTime());
@@ -64,10 +83,15 @@ export class DashboardService {
       todayShift,
       attendance: openAttendance ?? null,
       status: openAttendance ? 'ACTIVE' : 'OFFLINE',
-      newCases: escalations.filter((e) => e.status === EscalationStatus.ASSIGNED).length,
-      pending: escalations.filter(
-        (e) => e.status === EscalationStatus.ASSIGNED || e.status === EscalationStatus.CONTACTED,
-      ).length,
+      // Work-to-do figures fold in the unassigned queue so they match the Cases screen.
+      newCases:
+        escalations.filter((e) => e.status === EscalationStatus.ASSIGNED).length +
+        unassigned.length,
+      pending:
+        escalations.filter(
+          (e) => e.status === EscalationStatus.ASSIGNED || e.status === EscalationStatus.CONTACTED,
+        ).length + unassigned.length,
+      // Deliberately NOT widened: this is genuinely this doctor's own resolutions.
       resolved: escalations.filter(
         (e) => e.status === EscalationStatus.RESOLVED && e.resolvedAt && e.resolvedAt >= since,
       ).length,
@@ -76,7 +100,7 @@ export class DashboardService {
   }
 
   async overview() {
-    const since = startOfToday();
+    const since = startOfToday(this.clinicTimeZone);
 
     // IsNull() is required here too - a bare null is dropped by TypeORM, which made this
     // count every attendance row ever recorded instead of the currently open ones.
@@ -165,7 +189,7 @@ export class DashboardService {
   }
 
   async attendanceReport() {
-    const since = startOfToday();
+    const since = startOfToday(this.clinicTimeZone);
     const rows = await this.attendanceRepo
       .createQueryBuilder('a')
       .leftJoinAndSelect('a.doctor', 'doctor')
