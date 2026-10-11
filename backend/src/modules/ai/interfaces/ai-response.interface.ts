@@ -6,6 +6,8 @@ export interface StructuredAiAnswer {
   needsHuman: boolean;
   priority: EscalationPriority;
   reason: string;
+  /** The reply is a question back to the patient (surgery, triage, clarification), not a final answer. */
+  awaitingReply?: boolean;
   sourceChunkIds: string[];
 }
 

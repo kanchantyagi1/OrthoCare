@@ -149,13 +149,28 @@ export class ChatService {
     if (greeting) {
       aiAnswer = greeting;
     } else {
-      const history = await this.messageRepo.find({
-        where: { sessionId },
-        order: { createdAt: 'DESC' },
-        take: 10,
-      });
+      // Newest first; the patient message just saved is passed separately as the
+      // question, so it is left out here rather than sent to the model twice.
+      const history = (
+        await this.messageRepo.find({
+          where: { sessionId },
+          order: { createdAt: 'DESC' },
+          take: 13,
+        })
+      ).filter((m) => m.id !== patientMessage.id);
 
-      const queryEmbedding = await this.ai.embed(messageText);
+      // Triage is multi-turn: a reply like "No" or "only slight swelling" retrieves
+      // nothing on its own and would be escalated for lack of context. Searching
+      // with the patient's last few turns keeps it anchored to the surgery and the
+      // symptom being discussed.
+      const recentPatientTurns = history
+        .filter((m) => m.role === 'patient')
+        .slice(0, 2)
+        .reverse()
+        .map((m) => m.message);
+      const retrievalQuery = [...recentPatientTurns, messageText].join('\n');
+
+      const queryEmbedding = await this.ai.embed(retrievalQuery);
       retrievedChunks = await this.knowledge.retrieveRelevantChunks({
         queryEmbedding,
         topK: this.config.get<number>('rag.topK', 5),
@@ -171,12 +186,21 @@ export class ChatService {
         conversationHistory: history
           .reverse()
           .map((m) => ({ role: m.role, message: m.message })),
+        surgeryType: patient?.surgeryType,
       });
     }
 
+    const supported = aiAnswer.confidence === AiConfidence.SUPPORTED;
     let finalPriority = aiAnswer.priority;
-    let needsHuman = aiAnswer.needsHuman;
-    let reason = aiAnswer.reason;
+    // An unsupported answer is replaced below with a message promising the clinic
+    // team will follow up, so it must always produce an escalation to honour that.
+    let needsHuman = aiAnswer.needsHuman || !supported;
+    // The app hides "Was this helpful? / talk to a doctor" under a question back to
+    // the patient - tapping it there only created needless escalations.
+    let reason =
+      aiAnswer.awaitingReply && supported && !aiAnswer.needsHuman
+        ? `awaiting_patient_reply: ${aiAnswer.reason}`.trim()
+        : aiAnswer.reason;
 
     if (redFlagPriority && PRIORITY_RANK[redFlagPriority] > PRIORITY_RANK[finalPriority]) {
       finalPriority = redFlagPriority;
@@ -188,7 +212,7 @@ export class ChatService {
       this.messageRepo.create({
         sessionId,
         role: 'assistant',
-        message: aiAnswer.confidence === AiConfidence.SUPPORTED ? aiAnswer.answer : SAFE_ESCALATION_MESSAGE,
+        message: supported ? aiAnswer.answer : SAFE_ESCALATION_MESSAGE,
         confidence: aiAnswer.confidence,
         needsHuman,
         priority: finalPriority,

@@ -22,9 +22,11 @@ function fakeMessageRepo() {
       );
       return candidates[candidates.length - 1] || null;
     }),
-    find: jest.fn(async ({ where }: any = {}) =>
-      rows.filter((r) => Object.entries(where || {}).every(([k, v]) => r[k] === v)),
-    ),
+    find: jest.fn(async ({ where, order, take }: any = {}) => {
+      let found = rows.filter((r) => Object.entries(where || {}).every(([k, v]) => r[k] === v));
+      if (order?.createdAt === 'DESC') found = [...found].reverse();
+      return take ? found.slice(0, take) : found;
+    }),
   };
 }
 
@@ -230,5 +232,116 @@ describe('ChatService greetings', () => {
 
     expect(ai.answerQuestion).toHaveBeenCalled();
     expect(assistantMessage.message).toBe('Per the clinic leaflet, walk with support from day 1.');
+  });
+});
+
+describe('ChatService conversational triage', () => {
+  function buildService(aiAnswer: any, redFlag: EscalationPriority | null = null) {
+    const sessionRepo = {
+      findOne: jest.fn(async () => ({ id: 'session-1', patientId: 'patient-1' })),
+      save: jest.fn(async (s: any) => s),
+    };
+    const messageRepo = fakeMessageRepo();
+    const knowledge = { retrieveRelevantChunks: jest.fn(async () => []) };
+    const ai = { embed: jest.fn(async (_text: string) => [0.1]), answerQuestion: jest.fn(async (_p: any) => aiAnswer) };
+    const redFlags = { matchPriority: jest.fn(async () => redFlag) };
+    const escalations = { create: jest.fn(async (_input: any) => ({})) };
+    const patients = { findOne: jest.fn(async () => ({ id: 'patient-1', surgeryType: 'Knee Replacement' })) };
+    const service = new ChatService(
+      sessionRepo as any,
+      messageRepo as any,
+      knowledge as any,
+      ai as any,
+      redFlags as any,
+      escalations as any,
+      patients as any,
+      { record: jest.fn() } as any,
+      mockConfig(),
+    );
+    return { service, messageRepo, ai, escalations };
+  }
+
+  const followUp = {
+    answer: 'Which surgery did you have?',
+    confidence: AiConfidence.SUPPORTED,
+    needsHuman: false,
+    priority: EscalationPriority.NORMAL,
+    reason: 'asked_surgery',
+    awaitingReply: true,
+    sourceChunkIds: [],
+  };
+
+  it('tags a question back to the patient and does not escalate it', async () => {
+    const { service, escalations } = buildService(followUp);
+
+    const { assistantMessage } = await service.sendMessage('patient-1', 'session-1', 'My leg is swollen');
+
+    expect(assistantMessage.message).toBe('Which surgery did you have?');
+    expect(assistantMessage.needsHuman).toBe(false);
+    expect(assistantMessage.reason).toMatch(/^awaiting_patient_reply/);
+    expect(escalations.create).not.toHaveBeenCalled();
+  });
+
+  it('searches with earlier patient turns so a short triage reply keeps its context', async () => {
+    const { service, messageRepo, ai } = buildService(followUp);
+    const t0 = Date.now() - 60000;
+    messageRepo.rows.push(
+      { id: 'm1', sessionId: 'session-1', role: 'patient', message: 'I had knee replacement, calf is swollen', createdAt: new Date(t0) },
+      { id: 'm2', sessionId: 'session-1', role: 'assistant', message: 'Any chest pain or breathlessness?', createdAt: new Date(t0 + 1000) },
+    );
+
+    await service.sendMessage('patient-1', 'session-1', 'No');
+
+    expect(ai.embed).toHaveBeenCalledWith('I had knee replacement, calf is swollen\nNo');
+    const call = ai.answerQuestion.mock.calls[0][0];
+    expect(call.question).toBe('No');
+    expect(call.surgeryType).toBe('Knee Replacement');
+    // History is oldest-first and does not repeat the message being answered.
+    expect(call.conversationHistory.map((h: any) => h.message)).toEqual([
+      'I had knee replacement, calf is swollen',
+      'Any chest pain or breathlessness?',
+    ]);
+  });
+
+  it('escalates a Yellow flag with high priority', async () => {
+    const { service, escalations } = buildService({
+      answer: 'Please take a clear photo of both of your legs side-by-side.',
+      confidence: AiConfidence.SUPPORTED,
+      needsHuman: true,
+      priority: EscalationPriority.HIGH,
+      reason: 'dvt_yellow_flag',
+      awaitingReply: false,
+      sourceChunkIds: [],
+    });
+
+    const { assistantMessage } = await service.sendMessage('patient-1', 'session-1', 'Yes my calf is red and warm');
+
+    expect(assistantMessage.reason).toBe('dvt_yellow_flag');
+    expect(escalations.create).toHaveBeenCalledWith(expect.objectContaining({ priority: EscalationPriority.HIGH }));
+  });
+
+  it('still lets a clinic red-flag rule escalate a follow-up question', async () => {
+    const { service, escalations } = buildService(followUp, EscalationPriority.URGENT);
+
+    const { assistantMessage } = await service.sendMessage('patient-1', 'session-1', 'chest pain since morning');
+
+    expect(assistantMessage.needsHuman).toBe(true);
+    expect(escalations.create).toHaveBeenCalledWith(expect.objectContaining({ priority: EscalationPriority.URGENT }));
+  });
+
+  it('always escalates an unsupported answer, since the patient is told the team will follow up', async () => {
+    const { service, escalations } = buildService({
+      answer: 'some guess',
+      confidence: AiConfidence.INSUFFICIENT_CONTEXT,
+      needsHuman: false,
+      priority: EscalationPriority.NORMAL,
+      reason: 'not_covered',
+      sourceChunkIds: [],
+    });
+
+    const { assistantMessage } = await service.sendMessage('patient-1', 'session-1', 'Can I fly next week?');
+
+    expect(assistantMessage.message).toBe(SAFE_ESCALATION_MESSAGE);
+    expect(escalations.create).toHaveBeenCalled();
   });
 });

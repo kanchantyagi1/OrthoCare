@@ -11,6 +11,10 @@ class ChatMessage {
   final String? escalationId;
   final bool? helpful;
 
+  /// Backend's internal note on an assistant reply - `greeting`, or
+  /// `awaiting_patient_reply: ...` when the reply is a question back to the patient.
+  final String? reason;
+
   const ChatMessage({
     required this.id,
     required this.sender,
@@ -19,7 +23,15 @@ class ChatMessage {
     this.needsHumanFollowUp = false,
     this.escalationId,
     this.helpful,
+    this.reason,
   });
+
+  /// Greetings and questions back to the patient are not answers, so they get no
+  /// "Was this helpful? / talk to a doctor" prompt.
+  bool get isFinalAnswer =>
+      sender == MessageSender.assistant &&
+      reason != 'greeting' &&
+      !(reason ?? '').startsWith('awaiting_patient_reply');
 
   /// The backend persists messages as `role` ('patient' | 'assistant') and
   /// `message`; `sender`/`text` are accepted too so either shape parses.
@@ -32,6 +44,7 @@ class ChatMessage {
             (json['needsHuman'] ?? json['needsHumanFollowUp']) as bool? ?? false,
         escalationId: json['escalationId'] as String?,
         helpful: json['helpful'] as bool?,
+        reason: json['reason'] as String?,
       );
 
   static MessageSender _senderFrom(String? value) {
@@ -54,6 +67,7 @@ class ChatMessage {
         needsHumanFollowUp: needsHumanFollowUp,
         escalationId: escalationId,
         helpful: helpful ?? this.helpful,
+        reason: reason,
       );
 }
 

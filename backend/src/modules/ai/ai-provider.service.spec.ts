@@ -70,3 +70,53 @@ describe('AiProviderService (mock mode - medical safety)', () => {
     expect(vector).toHaveLength(1536);
   });
 });
+
+describe('AiProviderService (live mode request/response handling)', () => {
+  function liveService(reply: object) {
+    const ai = new AiProviderService(mockConfig({ 'openai.mockMode': false, 'openai.apiKey': 'test-key' }));
+    const create = jest.fn(async (_req: any) => ({ choices: [{ message: { content: JSON.stringify(reply) } }] }));
+    (ai as any).client = { chat: { completions: { create } } };
+    return { ai, create };
+  }
+
+  it('sends the recorded surgery, chunk ids and enough history for multi-turn triage', async () => {
+    const { ai, create } = liveService({ answer: 'ok', confidence: 'supported' });
+    const history = Array.from({ length: 14 }, (_, i) => ({
+      role: (i % 2 ? 'assistant' : 'patient') as 'patient' | 'assistant',
+      message: `turn ${i}`,
+    }));
+
+    await ai.answerQuestion({
+      question: 'No',
+      retrievedChunks: [{ id: 'chunk-uuid', chunkText: 'Keep leg elevated.', fileName: 'tkr.pdf', similarity: 0.6 }],
+      conversationHistory: history,
+      surgeryType: 'Knee Replacement',
+    });
+
+    const messages = create.mock.calls[0][0].messages;
+    expect(messages).toHaveLength(1 + 12 + 1);
+    expect(messages[1].content).toBe('turn 2');
+    const last = messages[messages.length - 1].content;
+    expect(last).toContain("Patient's recorded surgery: Knee Replacement");
+    expect(last).toContain('id: chunk-uuid');
+    expect(last).toContain('Patient message: No');
+  });
+
+  it('parses awaiting_reply from the model', async () => {
+    const { ai } = liveService({
+      answer: 'Which surgery did you have?',
+      confidence: 'supported',
+      needs_human: false,
+      priority: 'normal',
+      reason: 'asked_surgery',
+      awaiting_reply: true,
+      source_chunk_ids: [],
+    });
+
+    const result = await ai.answerQuestion({ question: 'my knee hurts', retrievedChunks: [], conversationHistory: [] });
+
+    expect(result.awaitingReply).toBe(true);
+    expect(result.confidence).toBe(AiConfidence.SUPPORTED);
+    expect(result.needsHuman).toBe(false);
+  });
+});

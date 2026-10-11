@@ -183,7 +183,7 @@ class _ChatBubble extends ConsumerWidget {
                 style: TextStyle(color: isPatient ? scheme.onPrimary : scheme.onSurface),
               ),
             ),
-            if (message.sender == MessageSender.assistant && message.helpful == null)
+            if (message.isFinalAnswer && message.helpful == null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(

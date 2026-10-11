@@ -43,6 +43,7 @@ export class AiProviderService {
     question: string;
     retrievedChunks: RetrievedChunk[];
     conversationHistory: { role: 'patient' | 'assistant'; message: string }[];
+    surgeryType?: string;
   }): Promise<StructuredAiAnswer> {
     const { question, retrievedChunks } = params;
 
@@ -53,11 +54,13 @@ export class AiProviderService {
     const context = retrievedChunks
       .map(
         (c, i) =>
-          `[${i + 1}] (source: ${c.fileName}${c.sectionTitle ? ' - ' + c.sectionTitle : ''}${c.pageNumber ? ', page ' + c.pageNumber : ''})\n${c.chunkText}`,
+          `[${i + 1}] (id: ${c.id}, source:${c.fileName}${c.sectionTitle ? ' - ' + c.sectionTitle : ''}${c.pageNumber ? ', page ' + c.pageNumber : ''})\n${c.chunkText}`,
       )
       .join('\n\n');
 
-    const recentHistory = params.conversationHistory.slice(-6);
+    // Triage runs over several turns (surgery, then up to 4 questions), so the model
+    // needs enough history to see which question it already asked and the answer.
+    const recentHistory = params.conversationHistory.slice(-12);
 
     try {
       const completion = await this.client!.chat.completions.create({
@@ -72,7 +75,7 @@ export class AiProviderService {
           })),
           {
             role: 'user',
-            content: `Approved clinic knowledge context:\n${context || '(no relevant context found)'}\n\nPatient question: ${question}`,
+            content: `Patient's recorded surgery: ${params.surgeryType || '(not recorded - check the conversation)'}\n\nApproved clinic knowledge context:\n${context || '(no relevant context found)'}\n\nPatient message: ${question}`,
           },
         ],
       });
@@ -91,6 +94,7 @@ export class AiProviderService {
           ? parsed.priority
           : EscalationPriority.NORMAL,
         reason: parsed.reason || '',
+        awaitingReply: Boolean(parsed.awaiting_reply),
         // The model generates these ids, so they are untrusted: it has been seen
         // returning positional indices ("1", "2") instead of ids, and nothing stops
         // it inventing one. Keep only ids belonging to chunks we actually supplied,
