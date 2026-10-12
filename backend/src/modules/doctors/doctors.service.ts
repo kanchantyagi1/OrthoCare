@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Doctor } from './entities/doctor.entity';
@@ -57,6 +57,42 @@ export class DoctorsService {
     specialization?: string;
     licenseNumber?: string;
   }) {
+    const existingUser = await this.userRepo.findOne({ where: { email: data.email } });
+    if (existingUser) {
+      const existingDoctor =
+        existingUser.role === Role.DOCTOR ? await this.repo.findOne({ where: { userId: existingUser.id } }) : null;
+
+      // "Remove doctor" deactivates rather than deletes (attendance/case history
+      // must survive), so a removed doctor's email is still sitting on their old,
+      // inactive user row. Re-adding them with that same email is the admin
+      // bringing them back, not a genuine duplicate - reactivate in place instead
+      // of rejecting it (which is what used to happen: Save looked "broken" on
+      // whichever phone tried to recreate a doctor that had just been removed).
+      if (existingDoctor && !existingDoctor.isActive) {
+        const passwordHash = await AuthService.hashPassword(data.password);
+        await this.userRepo.update(
+          { id: existingUser.id },
+          { passwordHash, fullName: data.fullName, phone: data.phone, isActive: true },
+        );
+        await this.repo.update(
+          { id: existingDoctor.id },
+          {
+            employeeCode: data.employeeCode,
+            specialization: data.specialization,
+            licenseNumber: data.licenseNumber,
+            isActive: true,
+          },
+        );
+        return this.findOne(existingDoctor.id);
+      }
+
+      // Without this check, the unique constraint on users.email raises a raw
+      // Postgres error that the global filter turns into a vague 500 - the admin
+      // saw "temporarily unable to process this request" for what is simply
+      // an email already in use by a genuinely active account.
+      throw new ConflictException('An account with this email already exists.');
+    }
+
     const passwordHash = await AuthService.hashPassword(data.password);
     const user = this.userRepo.create({
       email: data.email,
