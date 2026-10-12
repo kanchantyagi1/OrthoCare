@@ -60,8 +60,13 @@ jobs:
 
       # Unit tests (chat feedback rules) + layout tests that render every main
       # screen on small/typical/large-text phones and fail on any overflow.
+      # The layout tests render with the SDK's bundled Roboto + Material Icons
+      # (a "universal" cache artifact), so make sure it is downloaded.
+      # --reporter github turns each failure into a run annotation.
       - name: flutter test
-        run: flutter test
+        run: |
+          flutter precache --universal
+          flutter test --reporter github
 
       # Optional release signing: only runs if these repo secrets are set.
       # Without them, the build falls back to Flutter's default debug signing,

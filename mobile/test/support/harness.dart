@@ -41,8 +41,14 @@ bool _fontsLoaded = false;
 /// test font's boxes, and text metrics match a device.
 Future<void> loadAppFonts() async {
   if (_fontsLoaded) return;
-  final root = Platform.environment['FLUTTER_ROOT'] ?? _flutterRootFromDart();
+  final root = _flutterRoot();
   final fonts = '$root/bin/cache/artifacts/material_fonts';
+  if (!File('$fonts/roboto-regular.ttf').existsSync()) {
+    throw StateError(
+      'Bundled fonts not found at $fonts (FLUTTER_ROOT=${Platform.environment['FLUTTER_ROOT']}, '
+      'executable=${Platform.resolvedExecutable}). Run `flutter precache --universal`.',
+    );
+  }
   Future<ByteData> read(String f) async => ByteData.sublistView(await File('$fonts/$f').readAsBytes());
 
   final roboto = FontLoader('Roboto')
@@ -55,12 +61,15 @@ Future<void> loadAppFonts() async {
   _fontsLoaded = true;
 }
 
-String _flutterRootFromDart() {
-  // .../flutter/bin/cache/dart-sdk/bin/dart(.exe) -> .../flutter
-  final dart = File(Platform.resolvedExecutable).absolute.path.replaceAll('\\', '/');
-  final idx = dart.indexOf('/bin/cache/dart-sdk/');
-  if (idx == -1) throw StateError('Set FLUTTER_ROOT to load fonts (dart at $dart)');
-  return dart.substring(0, idx);
+/// The Flutter SDK root: FLUTTER_ROOT (set by the flutter tool), else derived
+/// from the test runner's own path (<root>/bin/cache/artifacts/engine/...).
+String _flutterRoot() {
+  final env = Platform.environment['FLUTTER_ROOT'];
+  if (env != null && env.isNotEmpty) return env.replaceAll(r'\', '/');
+  final exe = File(Platform.resolvedExecutable).absolute.path.replaceAll(r'\', '/');
+  final idx = exe.indexOf('/bin/cache/');
+  if (idx == -1) throw StateError('Cannot locate the Flutter SDK from $exe; set FLUTTER_ROOT.');
+  return exe.substring(0, idx);
 }
 
 /// Secure storage is a platform channel; in tests it simply holds nothing.
