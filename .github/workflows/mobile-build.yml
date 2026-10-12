@@ -66,7 +66,15 @@ jobs:
       - name: flutter test
         run: |
           flutter precache --universal
-          flutter test --reporter github
+          if ! flutter test --reporter expanded > test-output.txt 2>&1; then
+            cat test-output.txt
+            # Run logs need a login to read; annotations are public, so surface
+            # the failure text there (one annotation, newlines as %0A).
+            msg=$(grep -E -A6 "EXCEPTION|Error|Expected|\[E\]|failed" test-output.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=flutter test failed::${msg}"
+            exit 1
+          fi
+          tail -3 test-output.txt
 
       # Optional release signing: only runs if these repo secrets are set.
       # Without them, the build falls back to Flutter's default debug signing,
