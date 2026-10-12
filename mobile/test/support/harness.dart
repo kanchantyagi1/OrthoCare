@@ -39,23 +39,31 @@ bool _fontsLoaded = false;
 
 /// Real Roboto + Material Icons, so screenshots show real text instead of the
 /// test font's boxes, and text metrics match a device.
+///
+/// They come from the Flutter SDK's material_fonts cache artifact, which some
+/// SDK installs (e.g. the CI runner's) don't have. Without it the tests still
+/// run - every overflow/clipping check still applies, with Flutter's test font
+/// (whose square glyphs are wider than Roboto's, so it errs on the strict side)
+/// - and only the optional screenshots lose real typography.
 Future<void> loadAppFonts() async {
   if (_fontsLoaded) return;
-  final root = _flutterRoot();
-  final fonts = '$root/bin/cache/artifacts/material_fonts';
-  if (!File('$fonts/roboto-regular.ttf').existsSync()) {
-    throw StateError(
-      'Bundled fonts not found at $fonts (FLUTTER_ROOT=${Platform.environment['FLUTTER_ROOT']}, '
-      'executable=${Platform.resolvedExecutable}). Run `flutter precache --universal`.',
-    );
+  final dir = Directory('${_flutterRoot()}/bin/cache/artifacts/material_fonts');
+  // TEST_FONTS=off reproduces an SDK without the font cache (as on CI).
+  final files = dir.existsSync() && Platform.environment['TEST_FONTS'] != 'off'
+      ? {for (final f in dir.listSync().whereType<File>()) f.uri.pathSegments.last.toLowerCase(): f}
+      : <String, File>{};
+  if (!files.containsKey('roboto-regular.ttf') || !files.containsKey('materialicons-regular.otf')) {
+    // ignore: avoid_print
+    print('Bundled fonts not found in ${dir.path}; rendering with the test font.');
+    _fontsLoaded = true;
+    return;
   }
-  Future<ByteData> read(String f) async => ByteData.sublistView(await File('$fonts/$f').readAsBytes());
+  Future<ByteData> read(String name) async => ByteData.sublistView(await files[name]!.readAsBytes());
 
-  final roboto = FontLoader('Roboto')
-    ..addFont(read('roboto-regular.ttf'))
-    ..addFont(read('roboto-medium.ttf'))
-    ..addFont(read('roboto-bold.ttf'))
-    ..addFont(read('roboto-black.ttf'));
+  final roboto = FontLoader('Roboto');
+  for (final weight in ['regular', 'medium', 'bold', 'black']) {
+    if (files.containsKey('roboto-$weight.ttf')) roboto.addFont(read('roboto-$weight.ttf'));
+  }
   await roboto.load();
   await (FontLoader('MaterialIcons')..addFont(read('materialicons-regular.otf'))).load();
   _fontsLoaded = true;

@@ -19,11 +19,13 @@ class PatientDashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        // Flexible + ellipsis: with a wide system font at a large size, the
+        // title must give way rather than overflow the toolbar.
         title: const Row(
           children: [
             BrandAvatar(size: 34),
             SizedBox(width: 10),
-            Text('Prime Ortho'),
+            Flexible(child: Text('Prime Ortho', maxLines: 1, overflow: TextOverflow.ellipsis)),
           ],
         ),
         actions: [
