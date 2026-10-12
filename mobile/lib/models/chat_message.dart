@@ -71,6 +71,32 @@ class ChatMessage {
       );
 }
 
+/// The assistant message, if any, that should offer "Was this helpful? /
+/// No, talk to a doctor" right now.
+///
+/// Showing it under every reply cluttered the chat, so it is conversation-aware:
+/// - Never before the conversation's SECOND assistant response. Responses are
+///   counted from the conversation itself: only assistant messages count, so
+///   patient messages, the typing indicator, errors and retries (none of which
+///   are assistant messages) never move the count, and each reply is one
+///   message (replies arrive whole - there is no streaming).
+/// - Only on the latest message of the conversation, and only while it is the
+///   latest: once the patient sends another message, the prompt moves on.
+/// - Only on a real answer - not a greeting or a question back to the patient.
+/// - Not on a reply the backend already escalated to the clinic team, where
+///   "talk to a doctor" would only file a duplicate request.
+/// - Not once it has been answered.
+String? feedbackTargetMessageId(List<ChatMessage> messages) {
+  if (messages.isEmpty) return null;
+  final assistantResponses = messages.where((m) => m.sender == MessageSender.assistant).length;
+  if (assistantResponses < 2) return null;
+
+  final latest = messages.last;
+  if (latest.sender != MessageSender.assistant) return null;
+  if (!latest.isFinalAnswer || latest.needsHumanFollowUp || latest.helpful != null) return null;
+  return latest.id;
+}
+
 class ChatSession {
   final String id;
   final DateTime createdAt;

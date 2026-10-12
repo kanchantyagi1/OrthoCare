@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../models/dashboard_stats.dart';
+import '../../../widgets/brand.dart';
+import '../../../widgets/dashboard.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../../auth/auth_controller.dart';
 import '../admin_controller.dart';
@@ -17,7 +21,11 @@ class AdminDashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
-          IconButton(icon: const Icon(Icons.logout), onPressed: () => ref.read(authControllerProvider.notifier).logout()),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
+            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+          ),
         ],
       ),
       drawer: const _AdminDrawer(),
@@ -27,76 +35,79 @@ class AdminDashboardScreen extends ConsumerWidget {
           loading: () => const LoadingOverlay(),
           error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(adminDashboardProvider)),
           data: (s) => ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
             children: [
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.6,
+              const SectionHeader('Overview'),
+              StatGrid(
                 children: [
                   // "Active Doctors" literally counts currently-open attendance
                   // rows (dashboard.service.ts), so Attendance is the screen
                   // that number actually comes from - not Doctor Management,
                   // whose "active" means "not removed", a different concept.
-                  _StatCard(
-                    label: 'Active Doctors',
-                    value: s.activeDoctors,
+                  StatTile(
+                    label: 'Active doctors',
+                    value: '${s.activeDoctors}',
+                    icon: Icons.badge_outlined,
                     onTap: () => context.push('/admin/attendance'),
                   ),
                   // No admin chat-browser screen exists for these two, and
                   // routing to something that doesn't show this data would be
                   // misleading - left inert rather than guessing a destination.
-                  _StatCard(label: 'Patient Chats', value: s.patientChats),
-                  _StatCard(label: 'Resolved Instantly', value: s.resolvedByAssistant),
-                  _StatCard(
-                    label: 'Human Escalations',
-                    value: s.humanEscalations,
+                  StatTile(
+                    label: 'Patient chats',
+                    value: '${s.patientChats}',
+                    icon: Icons.forum_outlined,
+                  ),
+                  StatTile(
+                    label: 'Resolved instantly',
+                    value: '${s.resolvedByAssistant}',
+                    icon: Icons.task_alt,
+                    color: AppTheme.success,
+                  ),
+                  StatTile(
+                    label: 'Human escalations',
+                    value: '${s.humanEscalations}',
+                    icon: Icons.support_agent_outlined,
+                    color: AppTheme.normal,
                     onTap: () => context.push('/admin/escalations', extra: EscalationDashboardFilter.today),
                   ),
-                  _StatCard(
+                  StatTile(
                     label: 'Pending',
-                    value: s.pending,
+                    value: '${s.pending}',
+                    icon: Icons.hourglass_bottom_rounded,
+                    color: AppTheme.high,
                     onTap: () => context.push('/admin/escalations', extra: EscalationDashboardFilter.pending),
                   ),
-                  _StatCard(
+                  StatTile(
                     label: 'Urgent',
-                    value: s.urgent,
-                    highlight: true,
+                    value: '${s.urgent}',
+                    icon: Icons.priority_high_rounded,
+                    color: AppTheme.urgent,
+                    highlight: s.urgent > 0,
                     onTap: () => context.push('/admin/escalations', extra: EscalationDashboardFilter.urgent),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              Text('Doctor Performance', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('Doctor')),
-                      DataColumn(label: Text('Assigned')),
-                      DataColumn(label: Text('Resolved')),
-                      DataColumn(label: Text('Pending')),
-                      DataColumn(label: Text('Avg Response')),
-                      DataColumn(label: Text('SLA Breaches')),
-                    ],
-                    rows: s.doctorPerformance
-                        .map((d) => DataRow(cells: [
-                              DataCell(Text(d.doctorName)),
-                              DataCell(Text('${d.assigned}')),
-                              DataCell(Text('${d.resolved}')),
-                              DataCell(Text('${d.pending}')),
-                              DataCell(Text('${d.averageResponseMinutes.toStringAsFixed(0)} min')),
-                              DataCell(Text('${d.slaBreaches}')),
-                            ]))
-                        .toList(),
+              const SizedBox(height: 28),
+              const SectionHeader('Doctor performance'),
+              if (s.doctorPerformance.isEmpty)
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(
+                      'No doctor activity yet.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
                   ),
-                ),
-              ),
+                )
+              else
+                for (final d in s.doctorPerformance) ...[
+                  _DoctorPerformanceCard(performance: d),
+                  const SizedBox(height: 10),
+                ],
             ],
           ),
         ),
@@ -105,39 +116,51 @@ class AdminDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  final String label;
-  final int value;
-  final bool highlight;
-  final VoidCallback? onTap;
-  const _StatCard({required this.label, required this.value, this.highlight = false, this.onTap});
+/// One doctor's numbers as a compact card - a phone-width alternative to a
+/// six-column table that had to be scrolled sideways.
+class _DoctorPerformanceCard extends StatelessWidget {
+  const _DoctorPerformanceCard({required this.performance});
+
+  final DoctorPerformance performance;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final content = Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('$value', style: Theme.of(context).textTheme.headlineMedium),
-              // The only visual cue that a card is tappable - an inert card
-              // must not look interactive, so this is omitted when onTap is null.
-              if (onTap != null) Icon(Icons.chevron_right, size: 18, color: scheme.outline),
-            ],
-          ),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-    );
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final d = performance;
+
+    Widget metric(String value, String label, {Color? color}) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(value, style: theme.textTheme.titleMedium?.copyWith(color: color, fontWeight: FontWeight.w700)),
+            Text(label, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ],
+        );
+
     return Card(
-      color: highlight ? scheme.errorContainer : null,
-      clipBehavior: Clip.antiAlias,
-      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(d.doctorName, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 22,
+              runSpacing: 12,
+              children: [
+                metric('${d.assigned}', 'Assigned'),
+                metric('${d.resolved}', 'Resolved', color: AppTheme.success),
+                metric('${d.pending}', 'Pending', color: d.pending > 0 ? AppTheme.high : null),
+                metric('${d.averageResponseMinutes.toStringAsFixed(0)} min', 'Avg response'),
+                metric('${d.slaBreaches}', 'SLA breaches', color: d.slaBreaches > 0 ? AppTheme.urgent : null),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -160,10 +183,30 @@ class _AdminDrawer extends StatelessWidget {
       child: SafeArea(
         child: ListView(
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Prime Ortho — Admin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Row(
+                children: [
+                  const BrandAvatar(size: 44),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Prime Ortho', style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          'Admin',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const Divider(height: 16),
             item(Icons.dashboard_outlined, 'Dashboard', '/admin/dashboard'),
             item(Icons.people_outline, 'Doctor Management', '/admin/doctors'),
             item(Icons.schedule_outlined, 'Shift Management', '/admin/shifts'),

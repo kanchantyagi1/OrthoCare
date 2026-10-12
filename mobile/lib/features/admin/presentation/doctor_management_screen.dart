@@ -213,25 +213,39 @@ class _DoctorManagementScreenState extends ConsumerState<DoctorManagementScreen>
           actions: [
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
             FilledButton(
+              // Without this try/catch, a rejected request (e.g. an email that's
+              // not unique or not a valid address, or a password under 6 chars)
+              // threw silently: the dialog never closed and nothing told the
+              // admin why, so Save looked like it simply did nothing on that
+              // attempt. It now shows the server's own message and leaves the
+              // dialog open so they can fix the field and retry.
               onPressed: () async {
                 final actions = ref.read(adminActionsProvider);
-                if (existing == null) {
-                  await actions.createDoctor(
-                    email: emailController.text.trim(),
-                    fullName: nameController.text.trim(),
-                    phone: phoneController.text.trim(),
-                    password: passwordController.text,
-                  );
-                } else {
-                  await actions.updateDoctor(
-                    existing.id,
-                    fullName: nameController.text.trim(),
-                    phone: phoneController.text.trim(),
-                    isActive: active,
-                  );
+                try {
+                  if (existing == null) {
+                    await actions.createDoctor(
+                      email: emailController.text.trim(),
+                      fullName: nameController.text.trim(),
+                      phone: phoneController.text.trim(),
+                      password: passwordController.text,
+                    );
+                  } else {
+                    await actions.updateDoctor(
+                      existing.id,
+                      fullName: nameController.text.trim(),
+                      phone: phoneController.text.trim(),
+                      isActive: active,
+                    );
+                  }
+                  ref.invalidate(doctorsProvider);
+                  if (context.mounted) Navigator.of(context).pop();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.toString())),
+                    );
+                  }
                 }
-                ref.invalidate(doctorsProvider);
-                if (context.mounted) Navigator.of(context).pop();
               },
               child: const Text('Save'),
             ),

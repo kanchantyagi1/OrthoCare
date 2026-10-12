@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ draws its own splash (the adaptive launcher icon on a flat
+         colour). Pinned to white in light AND dark mode so it matches the
+         launcher icon background and the Flutter splash that follows. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@android:color/white</item>
+    </style>
+</resources>

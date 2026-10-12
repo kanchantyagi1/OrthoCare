@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../widgets/brand.dart';
+import '../../../widgets/loading_overlay.dart';
 import '../patient_session_controller.dart';
 
 /// Patients have no login. They enter a phone number once, which starts their
@@ -49,77 +51,103 @@ class _PatientStartScreenState extends ConsumerState<PatientStartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Start')),
+    return EntryScaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Your phone number', style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    Text(
-                      'We use this only so a clinic doctor can call you back if your '
-                      'question needs a human. No password, no account.',
-                      style: TextStyle(color: theme.colorScheme.outline),
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone number',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                      validator: (v) {
-                        final value = (v ?? '').trim();
-                        if (value.isEmpty) return 'Required';
-                        final digits = value.replaceAll(RegExp(r'\D'), '');
-                        if (digits.length < 7) return 'Enter a valid phone number';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _nameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Your name (optional)',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                      onFieldSubmitted: (_) => _submit(),
-                    ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-                    ],
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _submitting ? null : _submit,
-                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Continue'),
-                    ),
-                  ],
+        child: CustomScrollView(
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Builder(builder: _buildContent),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back',
+              onPressed: () => context.go('/welcome'),
+            ),
+          ),
+          const BrandHero(heightFraction: 0.24, minHeight: 110, maxHeight: 220),
+          const SizedBox(height: 20),
+          Text('Your phone number', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+          const SizedBox(height: 6),
+          Text(
+            'We use this only so a clinic doctor can call you back if your '
+            'question needs a human. No password, no account.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 28),
+          TextFormField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            autofocus: true,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.telephoneNumber],
+            decoration: const InputDecoration(
+              labelText: 'Phone number',
+              prefixIcon: Icon(Icons.phone_outlined),
+            ),
+            validator: (v) {
+              final value = (v ?? '').trim();
+              if (value.isEmpty) return 'Required';
+              final digits = value.replaceAll(RegExp(r'\D'), '');
+              if (digits.length < 7) return 'Enter a valid phone number';
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _nameController,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.name],
+            decoration: const InputDecoration(
+              labelText: 'Your name (optional)',
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+            onFieldSubmitted: (_) => _submit(),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            InlineErrorBanner(message: _error!),
+          ],
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _submitting ? null : _submit,
+            child: _submitting
+                ? SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: scheme.onPrimary),
+                  )
+                : const Text('Continue'),
+          ),
+          const Spacer(),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }

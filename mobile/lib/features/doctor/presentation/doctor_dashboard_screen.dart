@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../widgets/dashboard.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../../auth/auth_controller.dart';
 import '../doctor_controller.dart';
@@ -51,68 +52,61 @@ class DoctorDashboardScreen extends ConsumerWidget {
         },
         child: dashboard.when(
           loading: () => const LoadingOverlay(),
-          error: (e, _) => ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(doctorDashboardProvider)),
+          error: (e, _) =>
+              ErrorRetryView(message: e.toString(), onRetry: () => ref.invalidate(doctorDashboardProvider)),
           data: (data) {
             final isActive = attendance.valueOrNull?.status.name == 'active';
             return ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
               children: [
                 _ShiftCard(
-                  shiftLabel: data.todayShift == null
-                      ? 'No shift scheduled today'
-                      : data.todayShift!.rangeLabel,
+                  shiftLabel: data.todayShift == null ? 'No shift scheduled today' : data.todayShift!.rangeLabel,
                   isActive: isActive,
                   busy: attendance.isLoading,
                   onPunchIn: () => ref.read(attendanceControllerProvider.notifier).punchIn(),
                   onPunchOut: () => ref.read(attendanceControllerProvider.notifier).punchOut(),
                 ),
-                const SizedBox(height: 16),
-                Row(
+                const SizedBox(height: 24),
+                const SectionHeader('Your cases'),
+                // All three open the one case list this doctor has (grouped
+                // into "my cases" + the unassigned queue) - there is no
+                // separate filtered view to send New/Pending/Resolved to.
+                StatGrid(
                   children: [
-                    // All three open the one case list this doctor has (grouped
-                    // into "my cases" + the unassigned queue) - there is no
-                    // separate filtered view to send New/Pending/Resolved to.
-                    Expanded(
-                      child: _StatCard(
-                        label: 'New',
-                        value: data.newCases,
-                        color: AppTheme.urgent,
-                        onTap: () => context.push('/doctor/escalations'),
-                      ),
+                    StatTile(
+                      label: 'New',
+                      value: '${data.newCases}',
+                      icon: Icons.notification_important_outlined,
+                      color: AppTheme.urgent,
+                      highlight: data.newCases > 0,
+                      onTap: () => context.push('/doctor/escalations'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _StatCard(
-                        label: 'Pending',
-                        value: data.pending,
-                        color: AppTheme.high,
-                        onTap: () => context.push('/doctor/escalations'),
-                      ),
+                    StatTile(
+                      label: 'Pending',
+                      value: '${data.pending}',
+                      icon: Icons.hourglass_bottom_rounded,
+                      color: AppTheme.high,
+                      onTap: () => context.push('/doctor/escalations'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _StatCard(
-                        label: 'Resolved',
-                        value: data.resolved,
-                        color: Colors.green,
-                        onTap: () => context.push('/doctor/escalations'),
-                      ),
+                    StatTile(
+                      label: 'Resolved',
+                      value: '${data.resolved}',
+                      icon: Icons.check_circle_outline,
+                      color: AppTheme.success,
+                      onTap: () => context.push('/doctor/escalations'),
+                    ),
+                    StatTile(
+                      label: 'Avg. response',
+                      value: '${data.averageResponseMinutes.toStringAsFixed(0)} min',
+                      icon: Icons.timer_outlined,
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.timer_outlined),
-                    title: const Text('Average response'),
-                    trailing: Text('${data.averageResponseMinutes.toStringAsFixed(0)} min'),
-                  ),
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: () => context.push('/doctor/escalations'),
                   icon: const Icon(Icons.inbox_outlined),
-                  label: const Text('View Cases'),
+                  label: const Text('View cases'),
                 ),
               ],
             );
@@ -140,69 +134,69 @@ class _ShiftCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Card(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Today\'s Shift', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 4),
-            Text(shiftLabel, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
             Row(
               children: [
                 Container(
-                  width: 10,
-                  height: 10,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isActive ? Colors.green : scheme.outline,
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd - 2),
                   ),
+                  child: Icon(Icons.schedule_outlined, color: scheme.onPrimaryContainer),
                 ),
-                const SizedBox(width: 8),
-                Text(isActive ? 'ACTIVE' : 'OFFLINE', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const Spacer(),
-                FilledButton(
-                  onPressed: busy ? null : (isActive ? onPunchOut : onPunchIn),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: isActive ? scheme.errorContainer : null,
-                    foregroundColor: isActive ? scheme.onErrorContainer : null,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Today's shift", style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                      const SizedBox(height: 2),
+                      Text(shiftLabel, style: theme.textTheme.titleMedium),
+                    ],
                   ),
-                  child: Text(isActive ? 'Punch Out' : 'Punch In'),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            // Wrap rather than Row + Spacer: at large text sizes the button
+            // moves under the status instead of overflowing the card.
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  StatusPill(
+                    label: isActive ? 'ACTIVE' : 'OFFLINE',
+                    color: isActive ? AppTheme.success : scheme.outline,
+                  ),
+                  FilledButton(
+                    onPressed: busy ? null : (isActive ? onPunchOut : onPunchIn),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(132, 46),
+                      backgroundColor: isActive ? scheme.errorContainer : null,
+                      foregroundColor: isActive ? scheme.onErrorContainer : null,
+                    ),
+                    child: Text(isActive ? 'Punch Out' : 'Punch In'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final int value;
-  final Color color;
-  final VoidCallback? onTap;
-  const _StatCard({required this.label, required this.value, required this.color, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Column(
-        children: [
-          Text('$value', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 4),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-    );
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
   }
 }

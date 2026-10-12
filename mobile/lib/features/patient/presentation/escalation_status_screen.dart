@@ -26,9 +26,9 @@ class EscalationStatusScreen extends ConsumerWidget {
               return const EmptyStateView(message: 'No pending requests to the clinic team.', icon: Icons.support_agent_outlined);
             }
             return ListView.separated(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, i) {
                 final e = items[i];
                 return Card(
@@ -39,11 +39,21 @@ class EscalationStatusScreen extends ConsumerWidget {
                       children: [
                         Text(e.question, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
-                        Row(
+                        // Wrap, not Row + Spacer, so a long status and the date
+                        // stack on a narrow phone instead of overflowing.
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 6,
                           children: [
                             StatusBadge(status: e.status),
-                            const Spacer(),
-                            Text(DateFormat.yMMMd().add_jm().format(e.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                            Text(
+                              DateFormat.yMMMd().add_jm().format(e.createdAt),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
                           ],
                         ),
                         if (e.status == EscalationStatus.resolved) ...[

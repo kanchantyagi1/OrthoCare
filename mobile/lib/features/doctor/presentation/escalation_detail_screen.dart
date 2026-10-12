@@ -150,17 +150,20 @@ class _EscalationDetailBodyState extends ConsumerState<_EscalationDetailBody> {
     final ownership = _ownership(ref.watch(doctorEscalationsProvider));
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + MediaQuery.paddingOf(context).bottom),
       children: [
-        Row(
+        // Wrap, not Row + Spacer: priority + a long status like "Waiting for
+        // doctor" + the full date overflowed a narrow phone.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             PriorityChip(priority: e.priority),
-            const SizedBox(width: 8),
             StatusBadge(status: e.status),
-            const Spacer(),
             Text(
               DateFormat.yMMMd().add_jm().format(e.createdAt),
-              style: theme.textTheme.bodySmall,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ),

@@ -1,263 +1,202 @@
-"""Generates the Prime Ortho Android launcher icon set from the brand logo.
+"""Generates the Prime Ortho launcher icons (and the Play Store icon) from the brand art.
 
-Source: logo.jpeg (repo root) - a pre-composed 1254x1254 square icon tile
-(rounded-square art, white background, "Prime Ortho" wordmark + knee-joint
-mark) supplied by the user.
+Source: mobile/branding/app-icon.png - a 1254x1254 render of the PrimeOrtho mark
+(navy arrow + orange arc + figure) drawn INSIDE a white rounded-square tile with a
+drop shadow, on a near-white page.
 
-Two icon formats are produced:
+That source cannot be used as-is anywhere on Android:
+- As an adaptive-icon foreground, the baked-in rounded square + shadow would be
+  masked again by the launcher (a rounded square inside a circle), and the mark
+  would end up tiny.
+- As a legacy icon, the soft grey shadow and off-white page show as a dirty halo.
 
-1. Legacy mipmap/ic_launcher.png (+ ic_launcher_round.png): a direct
-   full-bleed resize of the source art per density. The source is already
-   composed edge-to-edge as a finished icon tile, so no extra masking is
-   needed here beyond what launchers already do to any app icon.
+So the mark itself is lifted out of the tile (MARK_BOX, measured from the art) and
+everything is rebuilt from it:
 
-2. Adaptive icon (API 26+): a background colour layer + a foreground bitmap
-   layer that the OS masks into a circle/squircle/rounded-square depending on
-   the launcher. The adaptive canvas is 108x108dp but only the inner ~66dp is
-   guaranteed visible (Android's "safe zone"), so content placed near the
-   edge of a 108dp foreground gets cropped unpredictably per-launcher.
+1. Adaptive icon (API 26+, i.e. virtually every device in use):
+   - background: flat white colour layer.
+   - foreground: the mark on transparency (white converted to alpha, which is
+     exactly reversible over the white background, so anti-aliased edges and the
+     soft grey "ball" render identically). Scaled so the mark's farthest pixel -
+     measured RADIALLY, because launcher masks are circles/squircles - lands just
+     inside Android's 66dp guaranteed-visible safe zone.
+   - monochrome: a single-colour silhouette for Android 13+ themed icons.
+2. Legacy ic_launcher / ic_launcher_round (API < 26): the mark on a white rounded
+   square / circle with a hairline edge so it doesn't vanish on light wallpapers.
+3. Play Store listing icon (512x512, full-bleed - Play applies its own mask).
 
-   The full wordmark cannot be the foreground: its text already reaches ~91%
-   of its own half-width, so scaling the WHOLE lockup to fit the safe zone
-   renders it as a barely-visible speck (confirmed by rendering it and
-   looking). Instead the foreground uses a crop isolating just the
-   knee-joint "P" mark (see MARK_CROP_BOX) - a compact glyph, which is also
-   simply how real app icons are designed (nobody ships their full text
-   wordmark as a home-screen icon). That mark is then scaled so its own real
-   content lands inside the safe zone with margin, computed from its actual
-   measured extent rather than assumed.
+Run from anywhere:  python mobile/tool/generate_launcher_icons.py
 """
 
 import os
-import xml.sax.saxutils as sax
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LOGO_PATH = os.path.join(ROOT, "logo.jpeg")
-RES_DIR = os.path.join(ROOT, "mobile", "android", "app", "src", "main", "res")
+MOBILE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SOURCE_PATH = os.path.join(MOBILE, "branding", "app-icon.png")
+RES_DIR = os.path.join(MOBILE, "android", "app", "src", "main", "res")
+PLAY_ICON_PATH = os.path.join(MOBILE, "branding", "play-store", "play-store-icon-512.png")
 
-# logo.jpeg is a full wordmark lockup ("Prime Ortho" text + the knee-joint "P"
-# mark + tagline swoosh) composed edge-to-edge as a 1254x1254 tile. That is
-# the right shape for the legacy launcher icon (used close to full-bleed, as
-# supplied), but wrong for the adaptive-icon foreground: Android's safe zone
-# only guarantees ~61% of the canvas (see SAFE_ZONE_* below), and a wordmark
-# whose text already reaches ~91% of its own half-width cannot be scaled to
-# fit that zone without becoming illegibly small - confirmed by rendering it
-# at the computed safe scale (~27%) and looking at the result. Real app icons
-# solve this the same way real brands do: a compact glyph, not the full
-# text lockup, for the small/masked surface. This crop isolates just the
-# knee-joint "P" + speed-line mark (manually located by inspecting the
-# source image - there is no automatic separator between the mark and the
-# adjoining "rime" text since they sit on one baseline as a single logotype).
-MARK_CROP_BOX = (125, 225, 553, 653)  # (left, top, right, bottom), 428x428
+# The mark's bounding box inside the source tile, padded slightly so anti-aliased
+# edges are kept. Measured from the art: content spans x 163-1106, y 158-1095,
+# well inside the white tile (which itself spans ~65-1190), so no tile edge or
+# shadow is included.
+MARK_BOX = (148, 143, 1121, 1110)
 
-# Legacy launcher icon sizes (px), by density.
-LEGACY_SIZES = {
-    "mdpi": 48,
-    "hdpi": 72,
-    "xhdpi": 96,
-    "xxhdpi": 144,
-    "xxxhdpi": 192,
-}
+# Anything this close to white counts as page, not mark (clears faint shadow/noise).
+WHITE_THRESHOLD = 10
 
-# Adaptive icon canvas sizes (px) = 108dp scaled per density.
-ADAPTIVE_SIZES = {
-    "mdpi": 108,
-    "hdpi": 162,
-    "xhdpi": 216,
-    "xxhdpi": 324,
-    "xxxhdpi": 432,
-}
+LEGACY_SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+ADAPTIVE_SIZES = {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}
 
-# Fraction of the adaptive canvas the logo occupies. Computed below from the
-# logo's actual content extent, not assumed - see content_extent_fraction().
-ADAPTIVE_CONTENT_SCALE = None  # set by main()
+# Android guarantees a 66dp-diameter circle of the 108dp adaptive canvas is visible
+# under every launcher mask. The mark's farthest pixel is placed at 97% of that
+# radius: as large as possible without relying on any one launcher's mask maths.
+SAFE_ZONE_RADIUS_FRACTION = (66 / 108) / 2
+SAFE_ZONE_MARGIN = 0.97
 
-# Android's guaranteed-visible "safe zone" under any launcher mask shape
-# (circle, squircle, rounded square) is a 66dp-diameter circle centered in
-# the 108dp adaptive canvas.
-SAFE_ZONE_DIAMETER_FRACTION = 66 / 108
-# Extra cushion so real content lands comfortably inside the safe zone
-# rather than right at its edge, where differences between launchers'
-# exact mask math could still clip a pixel or two.
-SAFE_ZONE_MARGIN = 0.90
-
-BACKGROUND_COLOR_HEX = "#FEFEFE"  # sampled from the logo's own background
+BACKGROUND_HEX = "#FFFFFF"
+EDGE_COLOR = (226, 231, 238, 255)  # hairline on legacy tiles, from the brand's cool greys
+SUPERSAMPLE = 4
 
 
-def content_extent_fraction(logo: Image.Image) -> float:
-    """Farthest distance of any non-background pixel from center, as a
-    fraction of the logo's own half-width. The source logo's outer region is
-    near-white padding/background - only pixels meaningfully different from
-    that (the wordmark, the knee-joint mark, the blue swoosh) count as
-    content that must not be clipped.
-    """
-    arr = np.asarray(logo).astype(int)
-    bg = np.array([254, 254, 254])
-    dist = np.abs(arr - bg).sum(axis=2)
-    ys, xs = np.where(dist > 24)  # threshold clears JPEG noise near white
-    w, h = logo.size
-    cx, cy = w / 2, h / 2
-    extents = [cx - xs.min(), xs.max() - cx, cy - ys.min(), ys.max() - cy]
-    return max(extents) / (w / 2)
+def load_mark() -> Image.Image:
+    """The mark on transparency: white -> alpha, reversible over a white background."""
+    src = Image.open(SOURCE_PATH).convert("RGB").crop(MARK_BOX)
+    rgb = np.asarray(src).astype(np.float64)
+    # Colour-to-alpha against white: the least alpha that reproduces the pixel
+    # when composited back over white.
+    diff = np.max(255.0 - rgb, axis=2)
+    alpha = diff / 255.0
+    alpha[diff < WHITE_THRESHOLD] = 0.0
+    # The tile's grey drop shadow pokes into the crop's corners (outside the tile's
+    # rounded corners) and is faint enough to pass the white threshold. Keep alpha
+    # only near pixels that are unmistakably mark - dilated so the mark's own
+    # anti-aliased edges survive - and drop everything else.
+    core = Image.fromarray(((diff > 60) * 255).astype(np.uint8), "L").filter(ImageFilter.MaxFilter(15))
+    alpha[np.asarray(core) == 0] = 0.0
+    safe = np.where(alpha > 0, alpha, 1.0)[..., None]
+    color = (rgb - 255.0 * (1.0 - alpha[..., None])) / safe
+    out = np.dstack([np.clip(color, 0, 255), alpha * 255.0]).round().astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
 
 
-def circular_mask(size: int) -> Image.Image:
-    mask = Image.new("L", (size, size), 0)
-    # Supersample for a smooth edge instead of a jagged low-res circle.
-    ss = 4
-    big = Image.new("L", (size * ss, size * ss), 0)
-    from PIL import ImageDraw
-
-    draw = ImageDraw.Draw(big)
-    draw.ellipse((0, 0, size * ss - 1, size * ss - 1), fill=255)
-    mask = big.resize((size, size), Image.LANCZOS)
-    return mask
+def radial_extent(mark: Image.Image) -> float:
+    """Farthest visible pixel from the mark's centre, in source pixels."""
+    a = np.asarray(mark)[..., 3]
+    ys, xs = np.nonzero(a > 8)
+    cx, cy = (mark.width - 1) / 2, (mark.height - 1) / 2
+    return float(np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2).max())
 
 
-def write_legacy_icons(logo: Image.Image) -> None:
+def place(mark: Image.Image, canvas: int, extent_px: float, target_radius_px: float) -> Image.Image:
+    """Mark scaled so its radial extent == target radius, centred on a transparent canvas."""
+    scale = target_radius_px / extent_px
+    w, h = round(mark.width * scale), round(mark.height * scale)
+    resized = mark.resize((w, h), Image.LANCZOS)
+    out = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    out.alpha_composite(resized, ((canvas - w) // 2, (canvas - h) // 2))
+    return out
+
+
+def tile(size: int, shape: str) -> Image.Image:
+    """White legacy tile (rounded square or circle) with a hairline edge, supersampled."""
+    big = size * SUPERSAMPLE
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    inset = round(big * 0.04)
+    box = (inset, inset, big - inset - 1, big - inset - 1)
+    edge = max(1, round(big * 0.008))
+    if shape == "circle":
+        d.ellipse(box, fill=EDGE_COLOR)
+        d.ellipse(tuple(v + (edge if i < 2 else -edge) for i, v in enumerate(box)), fill=(255, 255, 255, 255))
+    else:
+        r = round(big * 0.22)
+        d.rounded_rectangle(box, r, fill=EDGE_COLOR)
+        inner = tuple(v + (edge if i < 2 else -edge) for i, v in enumerate(box))
+        d.rounded_rectangle(inner, r - edge, fill=(255, 255, 255, 255))
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def write_adaptive(mark: Image.Image, extent: float) -> None:
+    for density, canvas in ADAPTIVE_SIZES.items():
+        out_dir = os.path.join(RES_DIR, f"mipmap-{density}")
+        target = canvas * SAFE_ZONE_RADIUS_FRACTION * SAFE_ZONE_MARGIN
+        fg = place(mark, canvas * SUPERSAMPLE, extent, target * SUPERSAMPLE).resize((canvas, canvas), Image.LANCZOS)
+        fg.save(os.path.join(out_dir, "ic_launcher_foreground.png"), "PNG", optimize=True)
+
+        # Themed-icon silhouette: one colour, shape only (the launcher tints it).
+        a = np.asarray(fg)[..., 3]
+        mono = np.zeros((canvas, canvas, 4), dtype=np.uint8)
+        mono[..., :3] = 255
+        mono[..., 3] = np.where(a > 0, np.minimum(255, a.astype(int) * 3), 0).astype(np.uint8)
+        Image.fromarray(mono, "RGBA").save(os.path.join(out_dir, "ic_launcher_monochrome.png"), "PNG", optimize=True)
+
+        # Verify against the rendered pixels, not the maths.
+        ys, xs = np.nonzero(a > 8)
+        c = (canvas - 1) / 2
+        reach = float(np.sqrt((xs - c) ** 2 + (ys - c) ** 2).max())
+        safe = canvas * SAFE_ZONE_RADIUS_FRACTION
+        assert reach <= safe, f"{density}: mark reaches {reach:.1f}px, safe zone is {safe:.1f}px"
+        print(f"  adaptive {density}: {canvas}px canvas, mark reaches {reach:.1f}px of {safe:.1f}px safe radius")
+
+
+def write_legacy(mark: Image.Image, extent: float) -> None:
     for density, size in LEGACY_SIZES.items():
         out_dir = os.path.join(RES_DIR, f"mipmap-{density}")
-        os.makedirs(out_dir, exist_ok=True)
-
-        resized = logo.resize((size, size), Image.LANCZOS)
-
-        square_path = os.path.join(out_dir, "ic_launcher.png")
-        resized.save(square_path, "PNG")
-
-        round_img = resized.copy()
-        round_img.putalpha(circular_mask(size))
-        round_path = os.path.join(out_dir, "ic_launcher_round.png")
-        round_img.save(round_path, "PNG")
-
-        print(f"  legacy {density}: {size}x{size} -> ic_launcher.png, ic_launcher_round.png")
+        for name, shape, fill in (("ic_launcher.png", "square", 0.40), ("ic_launcher_round.png", "circle", 0.36)):
+            base = tile(size, shape)
+            big = size * SUPERSAMPLE
+            logo = place(mark, big, extent, big * fill).resize((size, size), Image.LANCZOS)
+            base.alpha_composite(logo)
+            base.save(os.path.join(out_dir, name), "PNG", optimize=True)
+        print(f"  legacy {density}: {size}px ic_launcher.png + ic_launcher_round.png")
 
 
-def write_adaptive_foreground(logo: Image.Image, content_fraction: float) -> None:
-    for density, canvas_size in ADAPTIVE_SIZES.items():
-        out_dir = os.path.join(RES_DIR, f"mipmap-{density}")
-        os.makedirs(out_dir, exist_ok=True)
-
-        content_size = round(canvas_size * ADAPTIVE_CONTENT_SCALE)
-        resized_logo = logo.resize((content_size, content_size), Image.LANCZOS)
-
-        canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
-        offset = ((canvas_size - content_size) // 2, (canvas_size - content_size) // 2)
-        canvas.paste(resized_logo, offset)
-
-        out_path = os.path.join(out_dir, "ic_launcher_foreground.png")
-        canvas.save(out_path, "PNG")
-
-        # Verify the REAL content's farthest extent (not the full square's
-        # corners, most of which is plain background padding) sits inside
-        # Android's guaranteed-visible safe zone - fail loudly rather than
-        # shipping a silently-clipped icon again.
-        real_extent_px = (content_size / 2) * content_fraction
-        safe_radius_px = canvas_size * SAFE_ZONE_DIAMETER_FRACTION / 2 * SAFE_ZONE_MARGIN
-        status = "OK" if real_extent_px <= safe_radius_px else "WARNING: exceeds safe zone"
-        assert real_extent_px <= safe_radius_px, (
-            f"{density}: content extent {real_extent_px:.0f}px exceeds safe radius "
-            f"{safe_radius_px:.0f}px - lower ADAPTIVE_CONTENT_SCALE"
+def write_xml() -> None:
+    with open(os.path.join(RES_DIR, "values", "colors.xml"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(
+            '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+            f'    <color name="ic_launcher_background">{BACKGROUND_HEX}</color>\n'
+            "</resources>\n"
         )
-        print(
-            f"  adaptive {density}: canvas {canvas_size}x{canvas_size}, "
-            f"logo tile {content_size}x{content_size} ({ADAPTIVE_CONTENT_SCALE:.0%} of canvas), "
-            f"real content extent {real_extent_px:.0f}px <= safe radius {safe_radius_px:.0f}px [{status}]"
-        )
-
-
-def write_adaptive_xml_and_colors() -> None:
-    values_dir = os.path.join(RES_DIR, "values")
-    os.makedirs(values_dir, exist_ok=True)
-    colors_path = os.path.join(values_dir, "colors.xml")
-
-    colors_xml = (
-        '<?xml version="1.0" encoding="utf-8"?>\n'
-        "<resources>\n"
-        f'    <color name="ic_launcher_background">{sax.escape(BACKGROUND_COLOR_HEX)}</color>\n'
-        "</resources>\n"
-    )
-    with open(colors_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(colors_xml)
-    print(f"  wrote {colors_path}")
-
-    anydpi_dir = os.path.join(RES_DIR, "mipmap-anydpi-v26")
-    os.makedirs(anydpi_dir, exist_ok=True)
-
-    adaptive_xml = (
+    xml = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
         '    <background android:drawable="@color/ic_launcher_background"/>\n'
         '    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>\n'
+        '    <monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>\n'
         "</adaptive-icon>\n"
     )
     for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
-        path = os.path.join(anydpi_dir, name)
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(adaptive_xml)
-        print(f"  wrote {path}")
+        with open(os.path.join(RES_DIR, "mipmap-anydpi-v26", name), "w", encoding="utf-8", newline="\n") as f:
+            f.write(xml)
+    print("  colors.xml + mipmap-anydpi-v26/ic_launcher(.round).xml")
 
 
-def verify() -> None:
-    print("\n=== verification ===")
-    ok = True
-    for density, size in LEGACY_SIZES.items():
-        for name in ("ic_launcher.png", "ic_launcher_round.png"):
-            path = os.path.join(RES_DIR, f"mipmap-{density}", name)
-            with open(path, "rb") as f:
-                header = f.read(33)
-            assert header[:8] == b"\x89PNG\r\n\x1a\n", f"{path} is not a valid PNG"
-            w = int.from_bytes(header[16:20], "big")
-            h = int.from_bytes(header[20:24], "big")
-            assert (w, h) == (size, size), f"{path} is {w}x{h}, expected {size}x{size}"
-            ok = ok and True
-    for density, size in ADAPTIVE_SIZES.items():
-        path = os.path.join(RES_DIR, f"mipmap-{density}", "ic_launcher_foreground.png")
-        with open(path, "rb") as f:
-            header = f.read(33)
-        assert header[:8] == b"\x89PNG\r\n\x1a\n", f"{path} is not a valid PNG"
-        w = int.from_bytes(header[16:20], "big")
-        h = int.from_bytes(header[20:24], "big")
-        assert (w, h) == (size, size), f"{path} is {w}x{h}, expected {size}x{size}"
-    print("all PNG headers verified: correct magic bytes + exact expected pixel dimensions")
+def write_play_icon(mark: Image.Image, extent: float) -> None:
+    size = 512
+    big = size * SUPERSAMPLE
+    img = Image.new("RGBA", (big, big), (255, 255, 255, 255))
+    img.alpha_composite(place(mark, big, extent, big * 0.40))
+    os.makedirs(os.path.dirname(PLAY_ICON_PATH), exist_ok=True)
+    img.resize((size, size), Image.LANCZOS).convert("RGB").save(PLAY_ICON_PATH, "PNG", optimize=True)
+    print(f"  {os.path.relpath(PLAY_ICON_PATH, MOBILE)} (512x512, opaque)")
 
 
 def main() -> None:
-    print(f"Loading {LOGO_PATH}")
-    logo = Image.open(LOGO_PATH).convert("RGB")
-    assert logo.size[0] == logo.size[1], "logo.jpeg must be square"
-    print(f"Source: {logo.size[0]}x{logo.size[1]}")
-
-    mark = logo.crop(MARK_CROP_BOX)
-    assert mark.size[0] == mark.size[1], f"mark crop must be square, got {mark.size}"
-    print(f"Mark crop (for the adaptive icon): {MARK_CROP_BOX} -> {mark.size[0]}x{mark.size[1]}")
-
-    content_fraction = content_extent_fraction(mark)
-    # Solve for the largest canvas scale that still keeps real content inside
-    # the margined safe zone: scale * content_fraction <= safe_fraction.
-    safe_fraction = SAFE_ZONE_DIAMETER_FRACTION / 2 * SAFE_ZONE_MARGIN
-    global ADAPTIVE_CONTENT_SCALE
-    ADAPTIVE_CONTENT_SCALE = safe_fraction / content_fraction
-    print(
-        f"Real content reaches {content_fraction:.1%} of the logo's own half-width "
-        f"(the rest is background padding) -> adaptive scale set to {ADAPTIVE_CONTENT_SCALE:.1%} "
-        f"of the icon canvas so content lands at {ADAPTIVE_CONTENT_SCALE * content_fraction:.1%} "
-        f"of canvas half-width, inside the {safe_fraction:.1%} safe zone."
-    )
-
-    print("\nLegacy icons (full-bleed resize):")
-    write_legacy_icons(logo)
-
-    print("\nAdaptive icon foreground (scaled + centered, safe-zone checked):")
-    write_adaptive_foreground(mark, content_fraction)
-
-    print("\nAdaptive icon background colour + XML:")
-    write_adaptive_xml_and_colors()
-
-    verify()
-    print("\nDone.")
+    mark = load_mark()
+    extent = radial_extent(mark)
+    print(f"Mark {mark.width}x{mark.height}, radial extent {extent:.0f}px")
+    print("Adaptive icons:")
+    write_adaptive(mark, extent)
+    print("Legacy icons:")
+    write_legacy(mark, extent)
+    print("XML:")
+    write_xml()
+    print("Play Store:")
+    write_play_icon(mark, extent)
 
 
 if __name__ == "__main__":

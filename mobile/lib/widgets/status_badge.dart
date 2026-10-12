@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
 import '../models/escalation.dart';
 
 class StatusBadge extends StatelessWidget {
@@ -13,7 +14,7 @@ class StatusBadge extends StatelessWidget {
       EscalationStatus.waitingForDoctor => (scheme.error, 'Waiting for doctor'),
       EscalationStatus.assigned => (scheme.tertiary, 'Assigned'),
       EscalationStatus.contacted => (scheme.primary, 'Contacted'),
-      EscalationStatus.resolved => (Colors.green, 'Resolved'),
+      EscalationStatus.resolved => (AppTheme.success, 'Resolved'),
       EscalationStatus.escalatedToDoctor => (scheme.secondary, 'Escalated to senior'),
     };
     return Container(

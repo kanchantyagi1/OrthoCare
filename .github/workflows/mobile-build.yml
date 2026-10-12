@@ -58,6 +58,11 @@ jobs:
       - name: flutter analyze
         run: flutter analyze
 
+      # Unit tests (chat feedback rules) + layout tests that render every main
+      # screen on small/typical/large-text phones and fail on any overflow.
+      - name: flutter test
+        run: flutter test
+
       # Optional release signing: only runs if these repo secrets are set.
       # Without them, the build falls back to Flutter's default debug signing,
       # which is fine for internal testing but not for Play Store distribution.
@@ -73,14 +78,17 @@ jobs:
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           storeFile=release.jks
           EOF
+            echo "::notice title=Release signing::Built with the release upload key - this AAB can be uploaded to Google Play."
           else
             echo "No release keystore secrets configured - building with Flutter's default debug signing."
+            echo "::warning title=NOT release-signed::No ANDROID_KEYSTORE_* secrets - this build is debug-signed and Google Play will reject it."
           fi
 
-      # Off by default: Play Console only ever needs the AAB. Run manually from the
-      # Actions tab with build_apk=true when a sideloadable APK is actually needed.
+      # Off by default: Play Console only ever needs the AAB. Built when run
+      # manually with build_apk=true, or when the pushed commit message contains
+      # "[release]" (a release push builds both the APK and the AAB).
       - name: Build release APK (optional)
-        if: github.event.inputs.build_apk == 'true'
+        if: github.event.inputs.build_apk == 'true' || contains(github.event.head_commit.message, '[release]')
         run: |
           flutter build apk --release \
             --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
@@ -91,7 +99,7 @@ jobs:
             --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
 
       - name: Upload APK artifact
-        if: github.event.inputs.build_apk == 'true'
+        if: github.event.inputs.build_apk == 'true' || contains(github.event.head_commit.message, '[release]')
         uses: actions/upload-artifact@v4
         with:
           name: prime-ortho-release-apk

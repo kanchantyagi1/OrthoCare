@@ -103,7 +103,14 @@ class ChatController extends StateNotifier<ChatState> {
               createdAt: DateTime.now(),
               needsHumanFollowUp: response['needsHuman'] as bool? ?? false,
             );
-      state = state.copyWith(messages: [...state.messages, assistantReply], sending: false);
+      // A quick re-send of the same text makes the backend return the reply it
+      // already gave (`duplicate: true`) rather than a new one. Appending it
+      // again showed the same answer twice and counted it as two responses.
+      final alreadyShown = state.messages.any((m) => m.id == assistantReply.id);
+      state = state.copyWith(
+        messages: alreadyShown ? state.messages : [...state.messages, assistantReply],
+        sending: false,
+      );
     } catch (e) {
       state = state.copyWith(sending: false, error: e.toString());
     }

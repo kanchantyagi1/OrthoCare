@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../widgets/dashboard.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../patient_controller.dart';
 
@@ -24,15 +25,15 @@ class ChatHistoryScreen extends ConsumerWidget {
               return const EmptyStateView(message: 'No conversations yet.', icon: Icons.chat_bubble_outline);
             }
             return ListView.separated(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
               itemCount: sessions.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, i) {
                 final s = sessions[i];
-                return ListTile(
-                  leading: const Icon(Icons.chat_bubble_outline),
-                  title: Text(s.lastMessagePreview ?? 'Conversation'),
-                  subtitle: Text(DateFormat.yMMMd().add_jm().format(s.createdAt)),
+                return ActionTile(
+                  icon: Icons.chat_bubble_outline,
+                  title: s.lastMessagePreview ?? 'Conversation',
+                  subtitle: DateFormat.yMMMd().add_jm().format(s.createdAt),
                   onTap: () => context.push('/patient/chat?sessionId=${s.id}'),
                 );
               },

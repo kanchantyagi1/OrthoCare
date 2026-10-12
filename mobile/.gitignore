@@ -1,0 +1,6 @@
+
+# Local visual-review renders from test/screens (SCREENSHOTS=1 flutter test --update-goldens)
+/test/screenshots/
+
+# Python bytecode from tool/ scripts
+__pycache__/

@@ -1,7 +1,8 @@
 name: orthocare_ai
 description: "Prime Ortho — Expert Care. Faster Recovery."
 publish_to: "none"
-version: 0.1.0
+# versionName+versionCode. The build number must go up on every Play Console upload.
+version: 1.0.0+2
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -39,3 +40,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Generated from mobile/branding/ by tool/generate_brand_images.py.
+  assets:
+    - assets/images/

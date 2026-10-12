@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../models/document.dart';
 import '../../../widgets/loading_overlay.dart';
 import '../admin_controller.dart';
@@ -154,7 +155,7 @@ class _StatusLine extends StatelessWidget {
       DocumentStatus.processing => (scheme.tertiary, 'Processing: extracting, chunking, embedding, indexing...'),
       DocumentStatus.readyForReview => (scheme.secondary, 'Ready for review'),
       DocumentStatus.demoReviewRequired => (scheme.secondary, 'Demo — review required before activation'),
-      DocumentStatus.active => (Colors.green, 'Active'),
+      DocumentStatus.active => (AppTheme.success, 'Active'),
       DocumentStatus.failed => (scheme.error, 'Processing failed${failureReason != null ? ': $failureReason' : ''}'),
       DocumentStatus.archived => (scheme.outline, 'Archived'),
     };

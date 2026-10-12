@@ -17,8 +17,7 @@ const Map<EscalationPriority, int> _priorityOrder = {
 };
 
 /// A case is up for grabs when it is still waiting and nobody holds it.
-bool _isUnclaimed(Escalation e) =>
-    e.status == EscalationStatus.waitingForDoctor && e.assignedDoctorId == null;
+bool _isUnclaimed(Escalation e) => e.status == EscalationStatus.waitingForDoctor && e.assignedDoctorId == null;
 
 /// Doctor case list.
 ///
@@ -52,8 +51,7 @@ class _EscalationsListScreenState extends ConsumerState<EscalationsListScreen> {
     } catch (e) {
       // Another doctor may have taken it moments earlier. The backend rejects
       // rather than reassigning, so refresh to show who actually holds it now.
-      final alreadyTaken = e is ApiException &&
-          (e.statusCode == 409 || e.statusCode == 400 || e.statusCode == 404);
+      final alreadyTaken = e is ApiException && (e.statusCode == 409 || e.statusCode == 400 || e.statusCode == 404);
       ref.invalidate(doctorEscalationsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -97,7 +95,7 @@ class _EscalationsListScreenState extends ConsumerState<EscalationsListScreen> {
             }
 
             return ListView(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
               children: [
                 if (unclaimed.isNotEmpty) ...[
                   _SectionHeader(
@@ -153,14 +151,14 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Text(
             '$label ($count)',
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium,
           ),
           if (subtitle != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 subtitle!,
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
         ],
@@ -185,40 +183,55 @@ class _CaseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = escalation;
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    // Name and question get the full width; status and priority sit on their
+    // own wrapping line. (They used to be ListTile leading/trailing, which left
+    // the patient's name and question ~100dp and overflowed at large text.)
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        children: [
-          ListTile(
-            onTap: () => context.push('/doctor/escalations/${e.id}'),
-            leading: StatusBadge(status: e.status),
-            title: Text(e.patientName, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(e.question, maxLines: 2, overflow: TextOverflow.ellipsis),
-            ),
-            trailing: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                PriorityChip(priority: e.priority),
-                const SizedBox(height: 6),
-                Text(
-                  DateFormat.jm().format(e.createdAt),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            isThreeLine: true,
-          ),
-          if (claimable)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('/doctor/escalations/${e.id}'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  FilledButton.icon(
+                  Expanded(
+                    child: Text(
+                      e.patientName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(DateFormat.jm().format(e.createdAt), style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(e.question, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  PriorityChip(priority: e.priority),
+                  StatusBadge(status: e.status),
+                ],
+              ),
+              if (claimable) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
                     onPressed: claiming ? null : onClaim,
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
                     icon: claiming
                         ? const SizedBox(
                             height: 16,
@@ -228,10 +241,11 @@ class _CaseCard extends StatelessWidget {
                         : const Icon(Icons.how_to_reg_outlined, size: 18),
                     label: Text(claiming ? 'Claiming...' : 'Claim'),
                   ),
-                ],
-              ),
-            ),
-        ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
