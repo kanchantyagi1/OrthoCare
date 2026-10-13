@@ -103,8 +103,15 @@ jobs:
       - name: Build release APK (optional)
         if: github.event.inputs.build_apk == 'true' || contains(github.event.head_commit.message, '[release]')
         run: |
-          flutter build apk --release \
-            --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }}
+          if ! flutter build apk --release \
+            --dart-define=API_BASE_URL=${{ github.event.inputs.api_base_url || 'http://100.59.151.247:8081' }} > build-output.txt 2>&1; then
+            cat build-output.txt
+            # Same as flutter test: logs need a login, annotations are public.
+            msg=$(grep -E -B2 -A8 "FAILURE|What went wrong|Error|error:|Exception" build-output.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=flutter build apk failed::${msg}"
+            exit 1
+          fi
+          tail -3 build-output.txt
 
       - name: Build release AAB (Play Store bundle)
         run: |
