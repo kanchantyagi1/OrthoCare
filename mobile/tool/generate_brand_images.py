@@ -19,7 +19,7 @@ import os
 import numpy as np
 from PIL import Image
 
-from generate_launcher_icons import load_mark
+from generate_launcher_icons import MARK_ROTATION, load_mark, white_to_alpha
 
 MOBILE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCKSCREEN = os.path.join(MOBILE, "branding", "lockscreen.png")
@@ -33,6 +33,11 @@ FEATHER = {"left": 0.11, "right": 0.11, "top": 0.08, "bottom": 0.06}
 # Channel values above WHITEN_FROM fade smoothly to pure white by WHITEN_TO.
 WHITEN_FROM = 0.72
 WHITEN_TO = 0.93
+# The mark inside the hero crop: it spans x 163-588, y 45-467, and the wordmark
+# starts at y 476. It is turned like the launcher mark (MARK_ROTATION) about the
+# centre of its circle, which keeps it inside the same area, clear of the text.
+HERO_MARK_BOX = (150, 30, 602, 472)
+HERO_MARK_CENTER = (375, 256)
 
 
 def smoothstep(x: np.ndarray) -> np.ndarray:
@@ -56,6 +61,7 @@ def hero() -> None:
     crop = Image.fromarray(
         np.dstack([(rgb * 255).round().astype(np.uint8), np.asarray(crop)[..., 3]]), "RGBA"
     )
+    crop = rotate_hero_mark(crop)
     w, h = crop.size
     xs = np.arange(w)[None, :] / (w - 1)
     ys = np.arange(h)[:, None] / (h - 1)
@@ -71,6 +77,23 @@ def hero() -> None:
     path = os.path.join(OUT, "brand_hero.png")
     out.save(path, "PNG", optimize=True)
     print(f"  brand_hero.png {w}x{h}")
+
+
+def rotate_hero_mark(crop: Image.Image) -> Image.Image:
+    """Lift the mark out of the (whitened) lockup, turn it, and put it back."""
+    layer = Image.new("RGBA", crop.size, (0, 0, 0, 0))
+    layer.alpha_composite(white_to_alpha(crop.crop(HERO_MARK_BOX)), HERO_MARK_BOX[:2])
+    cx, cy = HERO_MARK_CENTER
+    r = max(cx - HERO_MARK_BOX[0], HERO_MARK_BOX[2] - cx, cy - HERO_MARK_BOX[1], HERO_MARK_BOX[3] - cy)
+    square = (cx - r, cy - r, cx + r, cy + r)
+    turned = Image.new("RGBA", crop.size, (0, 0, 0, 0))
+    turned.alpha_composite(layer.crop(square).transpose(MARK_ROTATION), square[:2])
+    # Nothing may land on the wordmark below the mark's area.
+    assert turned.crop((0, HERO_MARK_BOX[3], *crop.size)).getbbox() is None, "rotated mark hits the wordmark"
+    out = crop.copy()
+    out.paste((255, 255, 255, 255), HERO_MARK_BOX)
+    out.alpha_composite(turned)
+    return out
 
 
 def mark() -> None:

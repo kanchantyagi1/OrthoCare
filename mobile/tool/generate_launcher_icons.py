@@ -44,6 +44,10 @@ PLAY_ICON_PATH = os.path.join(MOBILE, "branding", "play-store", "play-store-icon
 # shadow is included.
 MARK_BOX = (148, 143, 1121, 1110)
 
+# The source art has the arrow pointing to ~5 o'clock; the brand shows it at
+# ~2 o'clock, so the whole mark is turned 90 degrees anticlockwise (lossless).
+MARK_ROTATION = Image.Transpose.ROTATE_90
+
 # Anything this close to white counts as page, not mark (clears faint shadow/noise).
 WHITE_THRESHOLD = 10
 
@@ -62,9 +66,14 @@ SUPERSAMPLE = 4
 
 
 def load_mark() -> Image.Image:
-    """The mark on transparency: white -> alpha, reversible over a white background."""
+    """The mark on transparency, turned to the brand orientation (see MARK_ROTATION)."""
     src = Image.open(SOURCE_PATH).convert("RGB").crop(MARK_BOX)
-    rgb = np.asarray(src).astype(np.float64)
+    return white_to_alpha(src).transpose(MARK_ROTATION)
+
+
+def white_to_alpha(src: Image.Image) -> Image.Image:
+    """Art drawn on white -> the same art on transparency, reversible over white."""
+    rgb = np.asarray(src.convert("RGB")).astype(np.float64)
     # Colour-to-alpha against white: the least alpha that reproduces the pixel
     # when composited back over white.
     diff = np.max(255.0 - rgb, axis=2)
